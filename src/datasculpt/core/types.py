@@ -106,6 +106,32 @@ class HypothesisScore:
 
 
 @dataclass
+class PseudoKeySignals:
+    """Signals indicating a column may be a pseudo-key.
+
+    Pseudo-keys are columns that appear unique but don't represent meaningful
+    business keys (e.g., row indices, UUIDs, auto-increment IDs).
+    """
+
+    is_monotonic_sequence: bool = False  # 1, 2, 3, ... N pattern
+    is_uuid_like: bool = False  # High entropy, no repeats, hex-like
+    is_ingestion_timestamp: bool = False  # created_at with tiny deltas
+    name_signal_penalty: float = 0.0  # Penalty from name patterns (row_id, index, etc.)
+    total_penalty: float = 0.0  # Combined penalty (capped at 0.5)
+
+
+@dataclass
+class GrainDiagnostics:
+    """Diagnostics for user feedback about grain quality."""
+
+    duplicate_groups: int = 0  # Number of key combinations with duplicates
+    max_group_size: int = 0  # Largest duplicate group size
+    rows_with_null_in_key: int = 0  # Rows with nulls in key columns
+    null_columns: list[str] = field(default_factory=list)  # Key columns with nulls
+    example_duplicate_keys: list[tuple] = field(default_factory=list)  # Sample duplicates (max 3)
+
+
+@dataclass
 class GrainInference:
     """Inferred grain (unique key) for a dataset."""
 
@@ -113,6 +139,7 @@ class GrainInference:
     confidence: float
     uniqueness_ratio: float
     evidence: list[str] = field(default_factory=list)
+    diagnostics: GrainDiagnostics | None = None
 
 
 @dataclass

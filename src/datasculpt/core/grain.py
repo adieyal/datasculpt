@@ -11,8 +11,10 @@ import pandas as pd
 
 from datasculpt.core.types import (
     ColumnEvidence,
+    GrainDiagnostics,
     GrainInference,
     InferenceConfig,
+    PseudoKeySignals,
     Role,
     ShapeHypothesis,
 )
@@ -37,10 +39,198 @@ SURVEY_ID_PATTERNS = (
     re.compile(r"_line$", re.IGNORECASE),  # roster_line
 )
 
+# Naming patterns for pseudo-keys (columns that look unique but aren't meaningful keys)
+PSEUDO_KEY_NAME_PATTERNS = (
+    (re.compile(r"^row_?id$", re.IGNORECASE), 0.3),  # row_id, rowid
+    (re.compile(r"^index$", re.IGNORECASE), 0.3),  # index
+    (re.compile(r"^_?id$", re.IGNORECASE), 0.1),  # id, _id (lower penalty - might be real)
+    (re.compile(r"^uuid$", re.IGNORECASE), 0.25),  # uuid
+    (re.compile(r"^guid$", re.IGNORECASE), 0.25),  # guid
+    (re.compile(r"^hash$", re.IGNORECASE), 0.2),  # hash
+    (re.compile(r"^created_at$", re.IGNORECASE), 0.2),  # created_at
+    (re.compile(r"^updated_at$", re.IGNORECASE), 0.2),  # updated_at
+    (re.compile(r"^inserted_at$", re.IGNORECASE), 0.2),  # inserted_at
+    (re.compile(r"^timestamp$", re.IGNORECASE), 0.15),  # timestamp
+    (re.compile(r"^record_?id$", re.IGNORECASE), 0.15),  # record_id
+    (re.compile(r"^row_?num(ber)?$", re.IGNORECASE), 0.3),  # row_num, row_number
+    (re.compile(r"^seq(uence)?$", re.IGNORECASE), 0.25),  # seq, sequence
+    (re.compile(r"^auto_?inc(rement)?$", re.IGNORECASE), 0.3),  # auto_inc, autoincrement
+)
+
 
 def _matches_survey_id_pattern(name: str) -> bool:
     """Check if name matches survey identifier patterns."""
     return any(p.search(name) for p in SURVEY_ID_PATTERNS)
+
+
+def _get_pseudo_key_name_penalty(name: str) -> float:
+    """Get penalty for pseudo-key name patterns.
+
+    Returns the highest matching penalty, or 0.0 if no pattern matches.
+    """
+    max_penalty = 0.0
+    for pattern, penalty in PSEUDO_KEY_NAME_PATTERNS:
+        if pattern.search(name):
+            max_penalty = max(max_penalty, penalty)
+    return max_penalty
+
+
+def _detect_monotonic_sequence(series: pd.Series) -> bool:
+    """Check if a series is a monotonic integer sequence (1, 2, 3, ... N).
+
+    This pattern indicates a row index or auto-increment ID.
+    """
+    if series.isna().any():
+        return False
+
+    # Must be numeric
+    if not pd.api.types.is_numeric_dtype(series):
+        return False
+
+    values = series.values
+    n = len(values)
+    if n < 2:
+        return False
+
+    # Check if it's 0..N-1 or 1..N (common patterns)
+    try:
+        is_zero_based = all(v == i for i, v in enumerate(values))
+        is_one_based = all(v == i + 1 for i, v in enumerate(values))
+        return is_zero_based or is_one_based
+    except (TypeError, ValueError):
+        return False
+
+
+def _detect_uuid_like(series: pd.Series) -> bool:
+    """Check if a series contains UUID-like values.
+
+    Characteristics:
+    - String type with fixed length (32-36 chars for UUIDs)
+    - High entropy (many unique characters)
+    - All unique values
+    - Contains hex-like patterns
+    """
+    if series.isna().any():
+        return False
+
+    # Must be string type
+    if not pd.api.types.is_string_dtype(series):
+        # Try to detect object dtype with string values
+        if series.dtype == object:
+            try:
+                sample = series.dropna().head(100).astype(str)
+            except (ValueError, TypeError):
+                return False
+        else:
+            return False
+    else:
+        sample = series.head(100)
+
+    if len(sample) < 2:
+        return False
+
+    # Check for fixed length (UUID pattern: 32 hex + 4 dashes = 36, or 32 without dashes)
+    lengths = sample.str.len()
+    unique_lengths = lengths.nunique()
+    if unique_lengths > 2:  # Allow some variation but not too much
+        return False
+
+    mode_length = lengths.mode().iloc[0] if len(lengths) > 0 else 0
+    if mode_length not in (32, 36):
+        return False
+
+    # Check for hex-like content (allow dashes)
+    hex_pattern = re.compile(r"^[0-9a-fA-F-]+$")
+    hex_matches = sample.apply(lambda x: bool(hex_pattern.match(str(x))) if pd.notna(x) else False)
+    if hex_matches.sum() < len(sample) * 0.9:  # At least 90% match
+        return False
+
+    # Check uniqueness - should be 100% unique
+    if series.nunique() != len(series):
+        return False
+
+    return True
+
+
+def _detect_ingestion_timestamp(series: pd.Series, name: str) -> bool:
+    """Check if a series is likely an ingestion timestamp.
+
+    Characteristics:
+    - Name suggests creation/insertion time
+    - Datetime values
+    - Very small time deltas between consecutive rows (suggests bulk insert)
+    """
+    # Check name signals first
+    timestamp_names = ("created_at", "updated_at", "inserted_at", "ingested_at", "load_time")
+    if name.lower() not in timestamp_names:
+        return False
+
+    # Try to convert to datetime
+    try:
+        if pd.api.types.is_datetime64_any_dtype(series):
+            dt_series = series
+        else:
+            dt_series = pd.to_datetime(series, errors="coerce")
+
+        if dt_series.isna().sum() > len(series) * 0.5:
+            return False
+
+        # Check for tiny deltas (suggests automated ingestion)
+        sorted_times = dt_series.dropna().sort_values()
+        if len(sorted_times) < 2:
+            return False
+
+        deltas = sorted_times.diff().dropna()
+        median_delta = deltas.median()
+
+        # If median delta is less than 1 second, likely auto-generated
+        if isinstance(median_delta, pd.Timedelta):
+            one_second = pd.Timedelta(seconds=1)
+            if median_delta < one_second:
+                return True
+
+    except (ValueError, TypeError):
+        pass
+
+    return False
+
+
+def detect_pseudo_key_signals(series: pd.Series, name: str) -> PseudoKeySignals:
+    """Detect signals that a column may be a pseudo-key.
+
+    Pseudo-keys are columns that uniquely identify rows but don't represent
+    meaningful business keys (e.g., row indices, UUIDs, ingestion timestamps).
+
+    Args:
+        series: Column data to analyze.
+        name: Column name.
+
+    Returns:
+        PseudoKeySignals with detection results and computed penalty.
+    """
+    is_monotonic = _detect_monotonic_sequence(series)
+    is_uuid = _detect_uuid_like(series)
+    is_timestamp = _detect_ingestion_timestamp(series, name)
+    name_penalty = _get_pseudo_key_name_penalty(name)
+
+    # Calculate total penalty (capped at 0.5)
+    total_penalty = name_penalty
+    if is_monotonic:
+        total_penalty += 0.3
+    if is_uuid:
+        total_penalty += 0.25
+    if is_timestamp:
+        total_penalty += 0.2
+
+    total_penalty = min(0.5, total_penalty)
+
+    return PseudoKeySignals(
+        is_monotonic_sequence=is_monotonic,
+        is_uuid_like=is_uuid,
+        is_ingestion_timestamp=is_timestamp,
+        name_signal_penalty=name_penalty,
+        total_penalty=total_penalty,
+    )
 
 
 @dataclass
@@ -52,6 +242,7 @@ class KeyCandidate:
     cardinality_ratio: float
     null_rate: float
     score: float
+    pseudo_key_signals: PseudoKeySignals | None = None
 
 
 def rank_key_candidates(
@@ -136,6 +327,11 @@ def rank_key_candidates(
         if _matches_survey_id_pattern(col_str):
             score += 0.25
 
+        # Detect and apply pseudo-key penalties
+        pseudo_signals = detect_pseudo_key_signals(series, col_str)
+        if pseudo_signals.total_penalty > 0:
+            score *= 1.0 - pseudo_signals.total_penalty
+
         candidates.append(
             KeyCandidate(
                 name=col_str,
@@ -143,12 +339,23 @@ def rank_key_candidates(
                 cardinality_ratio=cardinality_ratio,
                 null_rate=null_rate,
                 score=score,
+                pseudo_key_signals=pseudo_signals,
             )
         )
 
     # Sort by score descending (best candidates first)
     candidates.sort(key=lambda c: c.score, reverse=True)
-    return candidates
+
+    # Hybrid filtering: keep top-K candidates OR those above threshold
+    # This ensures we don't miss good candidates just because of a threshold
+    top_k = 8
+    score_threshold = 0.15
+    filtered = []
+    for i, c in enumerate(candidates):
+        if i < top_k or c.score >= score_threshold:
+            filtered.append(c)
+
+    return filtered
 
 
 def calculate_uniqueness_ratio(df: pd.DataFrame, columns: Sequence[str]) -> float:
@@ -222,17 +429,80 @@ def test_single_column_uniqueness(
     return None
 
 
+def score_key_combo(
+    df: pd.DataFrame,
+    columns: list[str],
+    candidates: list[KeyCandidate],
+    uniqueness: float,
+) -> float:
+    """Score a key combination based on multiple factors.
+
+    Considers:
+    - Uniqueness ratio (primary factor)
+    - Key size penalty (prefer smaller keys)
+    - Pseudo-key penalty (avoid auto-generated columns)
+    - Null rate penalty (prefer columns with few nulls)
+    - Candidate score bonus (prefer columns with good role alignment)
+
+    Args:
+        df: Input DataFrame.
+        columns: Columns in the combo.
+        candidates: Full list of key candidates (for lookup).
+        uniqueness: Pre-computed uniqueness ratio.
+
+    Returns:
+        Combined score (higher is better).
+    """
+    score = uniqueness
+
+    # Size penalty: 3% per additional column
+    score -= 0.03 * (len(columns) - 1)
+
+    # Build lookup for candidates
+    candidate_map = {c.name: c for c in candidates}
+
+    # Check for pseudo-keys and calculate average metrics
+    has_pseudo_key = False
+    total_null_rate = 0.0
+    total_candidate_score = 0.0
+    valid_count = 0
+
+    for col in columns:
+        if col in candidate_map:
+            c = candidate_map[col]
+            if c.pseudo_key_signals and c.pseudo_key_signals.total_penalty > 0.2:
+                has_pseudo_key = True
+            total_null_rate += c.null_rate
+            total_candidate_score += c.score
+            valid_count += 1
+
+    # Pseudo-key penalty
+    if has_pseudo_key:
+        score -= 0.2
+
+    # Null rate penalty
+    if valid_count > 0:
+        avg_null_rate = total_null_rate / valid_count
+        score -= 0.1 * avg_null_rate
+
+        # Role alignment bonus
+        avg_candidate_score = total_candidate_score / valid_count
+        score += 0.05 * avg_candidate_score
+
+    return max(0.0, score)
+
+
 def search_composite_keys(
     df: pd.DataFrame,
     candidates: list[KeyCandidate],
     max_columns: int = 4,
     min_uniqueness: float = 0.95,
     min_score_threshold: float = 0.2,
-) -> tuple[list[str], float] | None:
+) -> tuple[list[str], float, float] | None:
     """Search for composite keys by trying column combinations.
 
-    Prefers smaller key sets and exits early when perfect uniqueness found.
-    Only considers candidates with score above threshold.
+    Uses best-combo selection: evaluates all combinations at each size level
+    and picks the one with the best overall score (not just first-hit).
 
     Args:
         df: Input DataFrame.
@@ -242,7 +512,7 @@ def search_composite_keys(
         min_score_threshold: Minimum score to consider (filters out low-score columns).
 
     Returns:
-        Tuple of (column_names, uniqueness_ratio) if found, None otherwise.
+        Tuple of (column_names, uniqueness_ratio, combo_score) if found, None otherwise.
     """
     total_rows = len(df)
     if total_rows == 0:
@@ -252,44 +522,164 @@ def search_composite_keys(
     valid_candidates = [c for c in candidates if c.score >= min_score_threshold]
 
     # Limit search space - use 20 to handle datasets with many dimension columns
-    # (e.g., survey data where composite keys may involve lower-ranked columns)
     max_candidates = min(len(valid_candidates), 20)
-    candidate_names = [c.name for c in valid_candidates[:max_candidates]]
+    top_candidates = valid_candidates[:max_candidates]
+    candidate_names = [c.name for c in top_candidates]
 
-    best_result: tuple[list[str], float] | None = None
+    # Track best result across all sizes: (columns, uniqueness, score)
+    best_result: tuple[list[str], float, float] | None = None
 
     # Try combinations starting from size 2 (size 1 already tested)
     for size in range(2, max_columns + 1):
+        # Track best at this size level
+        best_at_size: tuple[list[str], float, float] | None = None
+
         for combo in combinations(candidate_names, size):
             columns = list(combo)
             uniqueness = calculate_uniqueness_ratio(df, columns)
 
-            # Perfect uniqueness - early exit
-            if uniqueness == 1.0:
-                return (columns, 1.0)
+            # Skip if below minimum threshold
+            if uniqueness < min_uniqueness:
+                continue
 
-            # Track best result above threshold
-            if uniqueness >= min_uniqueness:
-                if best_result is None or uniqueness > best_result[1]:
-                    best_result = (columns, uniqueness)
+            # Score this combo
+            combo_score = score_key_combo(df, columns, candidates, uniqueness)
 
-        # If we found a perfect result at this size, no need to try larger
-        if best_result is not None and best_result[1] == 1.0:
-            break
+            # Track best at this size
+            if best_at_size is None or combo_score > best_at_size[2]:
+                best_at_size = (columns, uniqueness, combo_score)
+
+        # Update overall best if this size found something better
+        if best_at_size is not None:
+            if best_result is None or best_at_size[2] > best_result[2]:
+                best_result = best_at_size
+
+            # Early exit: if we have 100% uniqueness AND high score, stop searching
+            if best_at_size[1] == 1.0 and best_at_size[2] > 0.8:
+                break
 
     return best_result
 
 
-def calculate_confidence(uniqueness_ratio: float, key_size: int) -> float:
-    """Calculate confidence score based on uniqueness and key size.
+def minimize_key(
+    df: pd.DataFrame,
+    columns: list[str],
+    min_uniqueness: float = 0.95,
+) -> list[str]:
+    """Minimize a key by removing redundant columns.
+
+    Attempts to remove columns from the end while maintaining uniqueness.
+    This helps produce cleaner keys when extra columns were included.
+
+    Args:
+        df: Input DataFrame.
+        columns: Initial key columns (order matters - removes from end first).
+        min_uniqueness: Minimum uniqueness to maintain.
+
+    Returns:
+        Minimized list of key columns.
+    """
+    if len(columns) <= 1:
+        return columns
+
+    current = list(columns)
+
+    # Try removing columns from the end (typically lower priority)
+    for col in reversed(columns):
+        if len(current) <= 1:
+            break
+
+        test = [c for c in current if c != col]
+        if calculate_uniqueness_ratio(df, test) >= min_uniqueness:
+            current = test
+
+    return current
+
+
+def calculate_grain_diagnostics(
+    df: pd.DataFrame,
+    columns: list[str],
+) -> GrainDiagnostics:
+    """Calculate diagnostics about grain quality.
+
+    Provides information useful for user feedback:
+    - How many rows have nulls in key columns
+    - How many duplicate groups exist
+    - Example duplicate keys for investigation
+
+    Args:
+        df: Input DataFrame.
+        columns: Key columns to analyze.
+
+    Returns:
+        GrainDiagnostics with quality metrics.
+    """
+    if not columns or len(df) == 0:
+        return GrainDiagnostics()
+
+    key_df = df[columns]
+
+    # Count nulls in key columns
+    null_mask = key_df.isna().any(axis=1)
+    rows_with_null = int(null_mask.sum())
+    null_columns = [col for col in columns if df[col].isna().any()]
+
+    # Find duplicates
+    non_null_df = key_df.dropna()
+    if len(non_null_df) == 0:
+        return GrainDiagnostics(
+            rows_with_null_in_key=rows_with_null,
+            null_columns=null_columns,
+        )
+
+    # Group by key and find duplicates
+    value_counts = non_null_df.groupby(list(columns), dropna=False).size()
+    duplicates = value_counts[value_counts > 1]
+
+    duplicate_groups = len(duplicates)
+    max_group_size = int(duplicates.max()) if len(duplicates) > 0 else 0
+
+    # Extract example duplicate keys (max 3)
+    example_keys: list[tuple] = []
+    if duplicate_groups > 0:
+        for key_tuple in duplicates.head(3).index:
+            if isinstance(key_tuple, tuple):
+                example_keys.append(key_tuple)
+            else:
+                # Single column case
+                example_keys.append((key_tuple,))
+
+    return GrainDiagnostics(
+        duplicate_groups=duplicate_groups,
+        max_group_size=max_group_size,
+        rows_with_null_in_key=rows_with_null,
+        null_columns=null_columns,
+        example_duplicate_keys=example_keys,
+    )
+
+
+def calculate_confidence(
+    uniqueness_ratio: float,
+    key_size: int,
+    pseudo_key_penalty: float = 0.0,
+    null_contamination: float = 0.0,
+    margin_vs_runner_up: float = 0.0,
+) -> float:
+    """Calculate confidence score based on multiple factors.
 
     Confidence is higher for:
     - Higher uniqueness ratios
     - Smaller key sets (single column preferred)
+    - No pseudo-key columns
+    - Low null rates in key columns
+    - Clear margin vs alternative candidates
 
     Args:
         uniqueness_ratio: The uniqueness ratio (0-1).
         key_size: Number of columns in the key.
+        pseudo_key_penalty: Penalty from pseudo-key columns (0-0.5).
+        null_contamination: Rate of rows with nulls in key (0-1).
+        margin_vs_runner_up: Score margin vs next best candidate (higher = more confident).
 
     Returns:
         Confidence score between 0 and 1.
@@ -304,7 +694,14 @@ def calculate_confidence(uniqueness_ratio: float, key_size: int) -> float:
     # 4 columns: 15% penalty
     size_penalty = 0.05 * (key_size - 1) if key_size > 1 else 0.0
 
+    # Apply penalties
     confidence = base_confidence - size_penalty
+    confidence -= pseudo_key_penalty * 0.3  # Pseudo-key penalty (scaled)
+    confidence -= null_contamination * 0.2  # Null penalty
+
+    # Margin bonus (if clear winner)
+    if margin_vs_runner_up > 0.1:
+        confidence += 0.05
 
     # Clamp to valid range
     return max(0.0, min(1.0, confidence))
@@ -365,12 +762,34 @@ def infer_grain(
         f"Analyzed {len(candidates)} columns as key candidates"
     )
 
+    # Helper to get pseudo-key penalty for columns
+    def get_pseudo_penalty(cols: list[str]) -> float:
+        candidate_map = {c.name: c for c in candidates}
+        max_penalty = 0.0
+        for col in cols:
+            if col in candidate_map:
+                c = candidate_map[col]
+                if c.pseudo_key_signals:
+                    max_penalty = max(max_penalty, c.pseudo_key_signals.total_penalty)
+        return max_penalty
+
     # Step 2: Try single-column uniqueness
     single_result = test_single_column_uniqueness(df, candidates)
 
     if single_result is not None:
         col_name, uniqueness = single_result
-        confidence = calculate_confidence(uniqueness, key_size=1)
+
+        # Calculate diagnostics
+        diagnostics = calculate_grain_diagnostics(df, [col_name])
+        null_contamination = diagnostics.rows_with_null_in_key / total_rows if total_rows > 0 else 0.0
+        pseudo_penalty = get_pseudo_penalty([col_name])
+
+        confidence = calculate_confidence(
+            uniqueness,
+            key_size=1,
+            pseudo_key_penalty=pseudo_penalty,
+            null_contamination=null_contamination,
+        )
 
         if uniqueness == 1.0:
             evidence_notes.append(f"Column '{col_name}' is perfectly unique")
@@ -379,11 +798,18 @@ def infer_grain(
                 f"Column '{col_name}' has {uniqueness:.2%} uniqueness"
             )
 
+        # Add diagnostic warnings
+        if pseudo_penalty > 0.1:
+            evidence_notes.append(f"Warning: '{col_name}' may be a pseudo-key (auto-generated)")
+        if diagnostics.rows_with_null_in_key > 0:
+            evidence_notes.append(f"Warning: {diagnostics.rows_with_null_in_key} rows have null in key column")
+
         return GrainInference(
             key_columns=[col_name],
             confidence=confidence,
             uniqueness_ratio=uniqueness,
             evidence=evidence_notes,
+            diagnostics=diagnostics,
         )
 
     evidence_notes.append("No single column provides sufficient uniqueness")
@@ -397,18 +823,51 @@ def infer_grain(
     )
 
     if composite_result is not None:
-        columns, uniqueness = composite_result
-        confidence = calculate_confidence(uniqueness, key_size=len(columns))
+        columns, uniqueness, combo_score = composite_result
+
+        # Minimize the key (remove redundant columns)
+        minimized_columns = minimize_key(df, columns, config.min_uniqueness_confidence)
+        if len(minimized_columns) < len(columns):
+            evidence_notes.append(
+                f"Minimized key from {len(columns)} to {len(minimized_columns)} columns"
+            )
+            columns = minimized_columns
+            # Recalculate uniqueness for minimized key
+            uniqueness = calculate_uniqueness_ratio(df, columns)
+
+        # Calculate diagnostics
+        diagnostics = calculate_grain_diagnostics(df, columns)
+        null_contamination = diagnostics.rows_with_null_in_key / total_rows if total_rows > 0 else 0.0
+        pseudo_penalty = get_pseudo_penalty(columns)
+
+        confidence = calculate_confidence(
+            uniqueness,
+            key_size=len(columns),
+            pseudo_key_penalty=pseudo_penalty,
+            null_contamination=null_contamination,
+        )
 
         evidence_notes.append(
             f"Composite key [{', '.join(columns)}] has {uniqueness:.2%} uniqueness"
         )
+
+        # Add diagnostic warnings
+        if pseudo_penalty > 0.1:
+            evidence_notes.append("Warning: Key contains potential pseudo-key column(s)")
+        if diagnostics.rows_with_null_in_key > 0:
+            evidence_notes.append(f"Warning: {diagnostics.rows_with_null_in_key} rows have nulls in key columns")
+        if diagnostics.duplicate_groups > 0:
+            evidence_notes.append(
+                f"Warning: {diagnostics.duplicate_groups} duplicate key combinations found "
+                f"(max group size: {diagnostics.max_group_size})"
+            )
 
         return GrainInference(
             key_columns=columns,
             confidence=confidence,
             uniqueness_ratio=uniqueness,
             evidence=evidence_notes,
+            diagnostics=diagnostics,
         )
 
     # Step 4: No stable grain found - return warning
@@ -422,12 +881,14 @@ def infer_grain(
     # Return best single-column candidate with its actual uniqueness
     best_candidate = candidates[0]
     best_uniqueness = calculate_uniqueness_ratio(df, [best_candidate.name])
+    diagnostics = calculate_grain_diagnostics(df, [best_candidate.name])
 
     return GrainInference(
         key_columns=[best_candidate.name],
         confidence=0.0,  # Zero confidence indicates no stable grain
         uniqueness_ratio=best_uniqueness,
         evidence=evidence_notes,
+        diagnostics=diagnostics,
     )
 
 

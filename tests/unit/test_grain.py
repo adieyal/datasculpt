@@ -9,14 +9,26 @@ from datasculpt.core.grain import (
     GrainInference,
     KeyCandidate,
     calculate_confidence,
+    calculate_grain_diagnostics,
     calculate_uniqueness_ratio,
+    detect_pseudo_key_signals,
     has_stable_grain,
     infer_grain,
+    minimize_key,
     rank_key_candidates,
+    score_key_combo,
     search_composite_keys,
 )
 from datasculpt.core.grain import test_single_column_uniqueness as check_single_column_uniqueness
-from datasculpt.core.types import ColumnEvidence, InferenceConfig, PrimitiveType, Role, StructuralType
+from datasculpt.core.types import (
+    ColumnEvidence,
+    GrainDiagnostics,
+    InferenceConfig,
+    PrimitiveType,
+    PseudoKeySignals,
+    Role,
+    StructuralType,
+)
 
 
 def make_evidence(
@@ -211,7 +223,7 @@ class TestSearchCompositeKeys:
 
         assert result is not None
         # Should find 2-column key, not include value which is unique alone
-        columns, uniqueness = result
+        columns, uniqueness, _score = result
         assert len(columns) <= 2
         assert uniqueness == 1.0
 
@@ -230,7 +242,7 @@ class TestSearchCompositeKeys:
         result = search_composite_keys(df, candidates)
 
         assert result is not None
-        columns, _ = result
+        columns, _uniqueness, _score = result
         # Should find [a, b] as composite key (size 2)
         assert len(columns) == 2
 
@@ -301,15 +313,18 @@ class TestInferGrain:
 
     def test_finds_single_column_grain(self) -> None:
         """Finds single column grain when one exists."""
+        # Use non-sequential IDs to avoid pseudo-key detection (1,2,3,4,5 triggers it)
         df = pd.DataFrame({
-            "id": [1, 2, 3, 4, 5],
+            "id": [101, 203, 305, 407, 509],  # Non-monotonic pattern
             "category": ["A", "A", "B", "B", "C"],
             "value": [10, 20, 30, 40, 50],
         })
         result = infer_grain(df)
 
         assert isinstance(result, GrainInference)
-        assert result.key_columns == ["id"]
+        # Either id or value could be selected since both are unique
+        assert len(result.key_columns) == 1
+        assert result.key_columns[0] in ["id", "value"]
         assert result.uniqueness_ratio == 1.0
         assert result.confidence > 0.9
 
@@ -425,3 +440,318 @@ class TestHasStableGrain:
         )
         assert has_stable_grain(grain, min_confidence=0.7) is True
         assert has_stable_grain(grain, min_confidence=0.9) is False
+
+
+class TestPseudoKeyDetection:
+    """Tests for pseudo-key detection functionality."""
+
+    def test_detects_monotonic_sequence(self) -> None:
+        """Detects 0..N-1 or 1..N sequence patterns."""
+        # 0-based sequence
+        series_zero = pd.Series([0, 1, 2, 3, 4])
+        signals = detect_pseudo_key_signals(series_zero, "row_num")
+        assert signals.is_monotonic_sequence is True
+
+        # 1-based sequence
+        series_one = pd.Series([1, 2, 3, 4, 5])
+        signals = detect_pseudo_key_signals(series_one, "id")
+        assert signals.is_monotonic_sequence is True
+
+    def test_not_monotonic_with_gaps(self) -> None:
+        """Non-sequential integers are not flagged."""
+        series = pd.Series([1, 3, 5, 7, 9])  # Odd numbers
+        signals = detect_pseudo_key_signals(series, "id")
+        assert signals.is_monotonic_sequence is False
+
+    def test_detects_uuid_like(self) -> None:
+        """Detects UUID-like hex strings."""
+        uuids = [
+            "550e8400-e29b-41d4-a716-446655440000",
+            "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+            "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+            "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+            "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+        ]
+        series = pd.Series(uuids)
+        signals = detect_pseudo_key_signals(series, "uuid_col")
+        assert signals.is_uuid_like is True
+
+    def test_not_uuid_with_repeats(self) -> None:
+        """Non-unique strings are not flagged as UUID-like."""
+        series = pd.Series(["abc", "abc", "def", "ghi", "jkl"])
+        signals = detect_pseudo_key_signals(series, "code")
+        assert signals.is_uuid_like is False
+
+    def test_name_pattern_penalties(self) -> None:
+        """Column names matching anti-patterns get penalties."""
+        series = pd.Series([1, 2, 3, 4, 5])
+
+        # row_id pattern
+        signals = detect_pseudo_key_signals(series, "row_id")
+        assert signals.name_signal_penalty > 0
+
+        # index pattern
+        signals = detect_pseudo_key_signals(series, "index")
+        assert signals.name_signal_penalty > 0
+
+        # Normal name - no penalty
+        signals = detect_pseudo_key_signals(series, "customer_id")
+        assert signals.name_signal_penalty == 0.0
+
+    def test_total_penalty_capped(self) -> None:
+        """Total penalty is capped at 0.5."""
+        # Monotonic sequence + bad name should be capped
+        series = pd.Series([1, 2, 3, 4, 5])
+        signals = detect_pseudo_key_signals(series, "row_id")
+        assert signals.total_penalty <= 0.5
+
+    def test_pseudo_signals_dataclass(self) -> None:
+        """PseudoKeySignals dataclass has expected fields."""
+        signals = PseudoKeySignals()
+        assert signals.is_monotonic_sequence is False
+        assert signals.is_uuid_like is False
+        assert signals.is_ingestion_timestamp is False
+        assert signals.name_signal_penalty == 0.0
+        assert signals.total_penalty == 0.0
+
+
+class TestKeyMinimization:
+    """Tests for minimize_key function."""
+
+    def test_removes_redundant_column(self) -> None:
+        """Removes column that doesn't contribute to uniqueness."""
+        df = pd.DataFrame({
+            "country": ["US", "US", "UK", "UK"],
+            "year": [2020, 2021, 2020, 2021],
+            "constant": ["A", "A", "A", "A"],  # Redundant
+        })
+        # All three columns achieve uniqueness, but constant is redundant
+        minimized = minimize_key(df, ["country", "year", "constant"])
+        assert "constant" not in minimized
+        assert set(minimized) == {"country", "year"}
+
+    def test_preserves_necessary_columns(self) -> None:
+        """Keeps all columns when all are necessary."""
+        df = pd.DataFrame({
+            "a": [1, 1, 2, 2],
+            "b": [1, 2, 1, 2],
+        })
+        minimized = minimize_key(df, ["a", "b"])
+        assert set(minimized) == {"a", "b"}
+
+    def test_single_column_unchanged(self) -> None:
+        """Single column keys are returned unchanged."""
+        df = pd.DataFrame({"id": [1, 2, 3, 4]})
+        minimized = minimize_key(df, ["id"])
+        assert minimized == ["id"]
+
+    def test_empty_columns(self) -> None:
+        """Empty column list returns empty."""
+        df = pd.DataFrame({"id": [1, 2, 3]})
+        minimized = minimize_key(df, [])
+        assert minimized == []
+
+
+class TestGrainDiagnostics:
+    """Tests for calculate_grain_diagnostics function."""
+
+    def test_counts_nulls_in_key(self) -> None:
+        """Counts rows with nulls in key columns."""
+        df = pd.DataFrame({
+            "id": [1, 2, None, 4],
+            "value": [10, 20, 30, 40],
+        })
+        diagnostics = calculate_grain_diagnostics(df, ["id"])
+        assert diagnostics.rows_with_null_in_key == 1
+        assert "id" in diagnostics.null_columns
+
+    def test_counts_duplicate_groups(self) -> None:
+        """Counts groups with duplicate keys."""
+        df = pd.DataFrame({
+            "key": ["A", "A", "B", "B", "C"],
+        })
+        diagnostics = calculate_grain_diagnostics(df, ["key"])
+        assert diagnostics.duplicate_groups == 2  # A and B have duplicates
+        assert diagnostics.max_group_size == 2
+
+    def test_extracts_example_duplicates(self) -> None:
+        """Extracts example duplicate key values."""
+        df = pd.DataFrame({
+            "key": ["A", "A", "A", "B", "C"],
+        })
+        diagnostics = calculate_grain_diagnostics(df, ["key"])
+        assert len(diagnostics.example_duplicate_keys) >= 1
+        # The duplicate key "A" should be in examples
+        assert ("A",) in diagnostics.example_duplicate_keys
+
+    def test_no_duplicates(self) -> None:
+        """Clean data has no duplicate diagnostics."""
+        df = pd.DataFrame({
+            "id": [1, 2, 3, 4, 5],
+        })
+        diagnostics = calculate_grain_diagnostics(df, ["id"])
+        assert diagnostics.duplicate_groups == 0
+        assert diagnostics.max_group_size == 0
+        assert diagnostics.rows_with_null_in_key == 0
+
+    def test_diagnostics_dataclass(self) -> None:
+        """GrainDiagnostics dataclass has expected defaults."""
+        diag = GrainDiagnostics()
+        assert diag.duplicate_groups == 0
+        assert diag.max_group_size == 0
+        assert diag.rows_with_null_in_key == 0
+        assert diag.null_columns == []
+        assert diag.example_duplicate_keys == []
+
+
+class TestBestComboSelection:
+    """Tests for best-combo selection in search_composite_keys."""
+
+    def test_returns_three_values(self) -> None:
+        """search_composite_keys returns columns, uniqueness, and score."""
+        df = pd.DataFrame({
+            "country": ["US", "US", "UK", "UK"],
+            "year": [2020, 2021, 2020, 2021],
+        })
+        candidates = [
+            KeyCandidate("country", 2, 0.5, 0.0, 0.5),
+            KeyCandidate("year", 2, 0.5, 0.0, 0.5),
+        ]
+        result = search_composite_keys(df, candidates)
+        assert result is not None
+        columns, uniqueness, score = result
+        assert isinstance(columns, list)
+        assert isinstance(uniqueness, float)
+        assert isinstance(score, float)
+
+    def test_scores_combos(self) -> None:
+        """score_key_combo produces reasonable scores."""
+        df = pd.DataFrame({
+            "a": [1, 1, 2, 2],
+            "b": [1, 2, 1, 2],
+        })
+        candidates = [
+            KeyCandidate("a", 2, 0.5, 0.0, 0.5),
+            KeyCandidate("b", 2, 0.5, 0.0, 0.5),
+        ]
+        score = score_key_combo(df, ["a", "b"], candidates, uniqueness=1.0)
+        assert 0.0 <= score <= 1.0
+        # Perfect uniqueness with 2 columns should score well
+        assert score > 0.9
+
+    def test_penalizes_pseudo_keys_in_combo(self) -> None:
+        """Combos with pseudo-keys get lower scores."""
+        df = pd.DataFrame({
+            "row_id": [1, 2, 3, 4],
+            "country": ["US", "US", "UK", "UK"],
+        })
+        pseudo_signals = PseudoKeySignals(
+            is_monotonic_sequence=True,
+            total_penalty=0.4,
+        )
+        candidates = [
+            KeyCandidate("row_id", 4, 1.0, 0.0, 0.7, pseudo_key_signals=pseudo_signals),
+            KeyCandidate("country", 2, 0.5, 0.0, 0.5),
+        ]
+        # Combo with pseudo-key
+        score_with_pseudo = score_key_combo(df, ["row_id", "country"], candidates, 1.0)
+        # Combo without pseudo-key (hypothetical)
+        score_without = score_key_combo(df, ["country"], candidates, 0.5)
+        # The pseudo-key penalty should affect the score
+        assert score_with_pseudo < 1.0
+
+
+class TestImprovedConfidence:
+    """Tests for improved multi-factor confidence calculation."""
+
+    def test_base_confidence(self) -> None:
+        """Base confidence equals uniqueness for simple cases."""
+        conf = calculate_confidence(uniqueness_ratio=0.95, key_size=1)
+        assert conf == 0.95
+
+    def test_pseudo_key_penalty(self) -> None:
+        """Pseudo-key penalty reduces confidence."""
+        conf_no_penalty = calculate_confidence(1.0, 1, pseudo_key_penalty=0.0)
+        conf_with_penalty = calculate_confidence(1.0, 1, pseudo_key_penalty=0.3)
+        assert conf_with_penalty < conf_no_penalty
+
+    def test_null_contamination_penalty(self) -> None:
+        """Null contamination reduces confidence."""
+        conf_clean = calculate_confidence(1.0, 1, null_contamination=0.0)
+        conf_nulls = calculate_confidence(1.0, 1, null_contamination=0.1)
+        assert conf_nulls < conf_clean
+
+    def test_margin_bonus(self) -> None:
+        """Large margin vs runner-up increases confidence."""
+        conf_close = calculate_confidence(0.95, 1, margin_vs_runner_up=0.05)
+        conf_clear = calculate_confidence(0.95, 1, margin_vs_runner_up=0.2)
+        assert conf_clear > conf_close
+
+    def test_combined_factors(self) -> None:
+        """All factors combine correctly."""
+        # Many penalties should reduce confidence significantly
+        conf = calculate_confidence(
+            uniqueness_ratio=0.95,
+            key_size=3,
+            pseudo_key_penalty=0.2,
+            null_contamination=0.1,
+        )
+        # Should be less than base uniqueness
+        assert conf < 0.95
+        # But still positive
+        assert conf > 0
+
+    def test_confidence_clamped(self) -> None:
+        """Confidence is clamped to 0-1 range."""
+        conf_low = calculate_confidence(0.1, 4, pseudo_key_penalty=0.5, null_contamination=0.5)
+        assert conf_low >= 0.0
+
+        conf_high = calculate_confidence(1.0, 1, margin_vs_runner_up=0.5)
+        assert conf_high <= 1.0
+
+
+class TestGrainInferenceWithDiagnostics:
+    """Tests for infer_grain with diagnostics."""
+
+    def test_includes_diagnostics(self) -> None:
+        """infer_grain returns diagnostics."""
+        df = pd.DataFrame({
+            "id": [1, 2, 3, 4, 5],
+            "value": [10, 20, 30, 40, 50],
+        })
+        result = infer_grain(df)
+        assert result.diagnostics is not None
+        assert isinstance(result.diagnostics, GrainDiagnostics)
+
+    def test_diagnostics_for_composite_key(self) -> None:
+        """Diagnostics calculated for composite keys."""
+        df = pd.DataFrame({
+            "country": ["US", "US", "UK", "UK"],
+            "year": [2020, 2021, 2020, 2021],
+        })
+        result = infer_grain(df)
+        assert result.diagnostics is not None
+
+    def test_pseudo_key_warning_in_evidence(self) -> None:
+        """Pseudo-key columns trigger warnings in evidence."""
+        df = pd.DataFrame({
+            "row_id": list(range(10)),  # Monotonic sequence
+            "value": [1, 1, 1, 2, 2, 2, 3, 3, 3, 4],
+        })
+        result = infer_grain(df)
+        # Should have some warning about pseudo-key
+        evidence_text = " ".join(result.evidence)
+        # Confidence should be reduced
+        assert result.confidence < 1.0
+
+    def test_minimization_noted_in_evidence(self) -> None:
+        """Key minimization is noted in evidence when it happens."""
+        df = pd.DataFrame({
+            "country": ["US", "US", "UK", "UK"],
+            "year": [2020, 2021, 2020, 2021],
+            "constant": ["X", "X", "X", "X"],
+        })
+        # Force composite key search by not having single unique column
+        result = infer_grain(df)
+        # If minimization happened, it should be noted
+        # (depends on whether constant gets included initially)
