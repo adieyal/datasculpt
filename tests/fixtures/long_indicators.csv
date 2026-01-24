@@ -1,0 +1,13 @@
+geo_id,date,indicator,value
+ZA-GP,2024-01-01,population,1200000
+ZA-GP,2024-01-01,unemployed,180000
+ZA-GP,2024-01-01,unemployment_rate,0.15
+ZA-WC,2024-01-01,population,600000
+ZA-WC,2024-01-01,unemployed,75000
+ZA-WC,2024-01-01,unemployment_rate,0.125
+ZA-GP,2024-02-01,population,1210000
+ZA-GP,2024-02-01,unemployed,175000
+ZA-GP,2024-02-01,unemployment_rate,0.145
+ZA-WC,2024-02-01,population,605000
+ZA-WC,2024-02-01,unemployed,72000
+ZA-WC,2024-02-01,unemployment_rate,0.119

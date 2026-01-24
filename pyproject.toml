@@ -1,0 +1,122 @@
+[project]
+name = "datasculpt"
+version = "0.1.0"
+description = "Deterministic dataset shape and semantic inference for Invariant"
+readme = "README.md"
+authors = [
+    { name = "Adi Eyal", email = "adi@clearforest.io" }
+]
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["data", "inference", "schema", "profiling", "tabular"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+frictionless = [
+    "frictionless>=5.0",
+]
+dataprofiler = [
+    "dataprofiler>=0.12",
+]
+reporting = [
+    "ydata-profiling>=4.0",
+]
+all = [
+    "datasculpt[frictionless,dataprofiler,reporting]",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "pandas-stubs>=2.0",
+]
+
+[project.scripts]
+datasculpt = "datasculpt.cli:main"
+
+[project.urls]
+Repository = "https://github.com/clearforest/datasculpt"
+Documentation = "https://github.com/clearforest/datasculpt#readme"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/datasculpt"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["datasculpt"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+plugins = ["numpy.typing.mypy_plugin"]
+
+[[tool.mypy.overrides]]
+module = [
+    "frictionless.*",
+    "dataprofiler.*",
+    "ydata_profiling.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "-ra",
+]
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests requiring optional dependencies",
+]
+
+[tool.coverage.run]
+source = ["src/datasculpt"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
