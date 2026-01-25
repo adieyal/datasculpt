@@ -130,6 +130,26 @@ pip install datasculpt[all]            # Everything
 - Python 3.11+
 - pandas 2.0+
 
+## Development
+
+```bash
+# Install with dev dependencies
+make install-dev
+
+# Run tests
+make test
+
+# Lint and format
+make lint
+make format
+
+# Type checking
+make typecheck
+
+# Serve docs locally
+make docs-serve
+```
+
 ## License
 
 MIT
