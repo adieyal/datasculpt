@@ -140,7 +140,7 @@ def detect_primitive_type(series: Series) -> tuple[PrimitiveType, list[str]]:
         return PrimitiveType.DATE, notes
 
     # For object dtype, inspect actual values
-    if dtype is object:
+    if dtype == object:  # noqa: E721 - numpy dtype requires == not is
         return _detect_type_from_values(non_null)
 
     return PrimitiveType.STRING, notes
