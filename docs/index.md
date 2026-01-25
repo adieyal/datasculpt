@@ -2,6 +2,13 @@
 
 Datasculpt infers the structural intent of tabular datasets before they enter semantic systems.
 
+## Try It Now
+
+**[Launch the Interactive Demo](demo/)** — Upload a CSV or Excel file and see inference in action. Your data never leaves your browser.
+
+!!! note "About the Demo"
+    The demo uses [Pyodide](https://pyodide.org/) to run Python entirely in your browser. This is for demonstration purposes only. In production, Datasculpt is designed to run server-side where it can process larger datasets efficiently and integrate with your data pipelines.
+
 ## Who This Documentation Is For
 
 | You are... | Start here |

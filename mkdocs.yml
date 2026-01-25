@@ -1,9 +1,9 @@
 site_name: Datasculpt
 site_description: Deterministic dataset shape and semantic inference for tabular data
-site_url: https://clearforest.github.io/datasculpt
+site_url: https://adieyal.github.io/datasculpt
 
-repo_name: clearforest/datasculpt
-repo_url: https://github.com/clearforest/datasculpt
+repo_name: adieyal/datasculpt
+repo_url: https://github.com/adieyal/datasculpt
 
 theme:
   name: material
@@ -142,4 +142,4 @@ extra_javascript:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/clearforest/datasculpt
+      link: https://github.com/adieyal/datasculpt
