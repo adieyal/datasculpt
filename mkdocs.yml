@@ -1,0 +1,145 @@
+site_name: Datasculpt
+site_description: Deterministic dataset shape and semantic inference for tabular data
+site_url: https://clearforest.github.io/datasculpt
+
+repo_name: clearforest/datasculpt
+repo_url: https://github.com/clearforest/datasculpt
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Overview: getting-started/index.md
+      - Quickstart: getting-started/quickstart.md
+      - Mental Model: getting-started/mental-model.md
+  - Examples:
+      - Overview: examples/index.md
+      - Wide Observations: examples/wide-observations.md
+      - Long Indicators: examples/long-indicators.md
+      - Wide Time Columns: examples/wide-time-columns.md
+      - Series Column: examples/series-column.md
+      - Ambiguous Shape: examples/ambiguous-shape.md
+      - Grain Detection: examples/grain-detection.md
+  - Concepts:
+      - Overview: concepts/index.md
+      - Structural Metadata: concepts/structural-metadata.md
+      - Evidence: concepts/evidence.md
+      - Shapes: concepts/shapes.md
+      - Roles: concepts/roles.md
+      - Grain: concepts/grain.md
+      - Decision Records: concepts/decision-records.md
+  - Integration:
+      - Overview: integration/index.md
+      - Minimal Integration: integration/minimal-integration.md
+      - Interactive Mode: integration/interactive-mode.md
+      - Optional Adapters: integration/optional-adapters.md
+      - Invariant Handoff: integration/invariant-handoff.md
+  - Architecture:
+      - Overview: architecture/index.md
+      - Pipeline: architecture/pipeline.md
+      - Design Principles: architecture/design-principles.md
+      - Scope Boundaries: architecture/scope-boundaries.md
+  - Reference:
+      - Overview: reference/index.md
+      - API: reference/api.md
+      - Types: reference/types.md
+      - Configuration: reference/configuration.md
+      - CLI: reference/cli.md
+      - Glossary: reference/glossary.md
+
+markdown_extensions:
+  # Admonitions
+  - admonition
+  - pymdownx.details
+
+  # Annotations & Code blocks
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+
+  # Mermaid diagrams
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+  # Content tabs
+  - pymdownx.tabbed:
+      alternate_style: true
+
+  # Data tables
+  - tables
+
+  # Footnotes
+  - footnotes
+
+  # Formatting
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+
+  # Icons & Emojis
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+  # Lists
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+  # Math
+  - pymdownx.arithmatex:
+      generic: true
+
+  # Table of contents
+  - toc:
+      permalink: true
+
+  # Tooltips
+  - abbr
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/clearforest/datasculpt
