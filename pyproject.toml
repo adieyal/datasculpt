@@ -45,13 +45,17 @@ dev = [
     "mypy>=1.10",
     "pandas-stubs>=2.0",
 ]
+docs = [
+    "mkdocs>=1.5",
+    "mkdocs-material>=9.0",
+]
 
 [project.scripts]
 datasculpt = "datasculpt.cli:main"
 
 [project.urls]
-Repository = "https://github.com/clearforest/datasculpt"
-Documentation = "https://github.com/clearforest/datasculpt#readme"
+Repository = "https://github.com/adieyal/datasculpt"
+Documentation = "https://adieyal.github.io/datasculpt/"
 
 [build-system]
 requires = ["hatchling"]
