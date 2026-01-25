@@ -4,23 +4,32 @@ site_url: https://adieyal.github.io/datasculpt
 
 repo_name: adieyal/datasculpt
 repo_url: https://github.com/adieyal/datasculpt
+edit_uri: edit/master/docs/
 
 theme:
   name: material
   palette:
-    - scheme: default
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
       primary: indigo
       accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
-    - scheme: slate
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
       primary: indigo
       accent: indigo
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
   features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
     - navigation.sections
     - navigation.expand
     - navigation.top
@@ -30,6 +39,8 @@ theme:
     - content.code.copy
     - content.code.annotate
     - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
 
 nav:
   - Home: index.md
@@ -85,7 +96,9 @@ markdown_extensions:
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
-  - pymdownx.snippets
+  - pymdownx.snippets:
+      base_path: docs
+      check_paths: true
 
   # Mermaid diagrams
   - pymdownx.superfences:
@@ -128,6 +141,7 @@ markdown_extensions:
   # Table of contents
   - toc:
       permalink: true
+      toc_depth: 3
 
   # Tooltips
   - abbr
