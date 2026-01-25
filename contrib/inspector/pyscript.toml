@@ -1,0 +1,21 @@
+name = "datasculpt-inspector"
+
+packages = ["pandas", "openpyxl"]
+
+[files]
+"./py/main.py" = "./main.py"
+"./py/file_handler.py" = "./file_handler.py"
+"./py/inference.py" = "./inference.py"
+"./py/ui_renderer.py" = "./ui_renderer.py"
+"./py/export.py" = "./export.py"
+"./py/datasculpt/__init__.py" = "./datasculpt/__init__.py"
+"./py/datasculpt/types.py" = "./datasculpt/types.py"
+"./py/datasculpt/evidence.py" = "./datasculpt/evidence.py"
+"./py/datasculpt/roles.py" = "./datasculpt/roles.py"
+"./py/datasculpt/shapes.py" = "./datasculpt/shapes.py"
+"./py/datasculpt/grain.py" = "./datasculpt/grain.py"
+"./py/datasculpt/time_axis.py" = "./datasculpt/time_axis.py"
+"./py/datasculpt/special.py" = "./datasculpt/special.py"
+"./py/datasculpt/pipeline.py" = "./datasculpt/pipeline.py"
+"./py/datasculpt/proposal.py" = "./datasculpt/proposal.py"
+"./py/datasculpt/interactive.py" = "./datasculpt/interactive.py"

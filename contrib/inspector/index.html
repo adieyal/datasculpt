@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datasculpt Inspector</title>
+
+    <!-- Bulma CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@1.0.0/css/bulma.min.css">
+
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="css/inspector.css">
+
+    <!-- PyScript -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+</head>
+<body>
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay is-active">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p id="loading-status" class="loading-status">Loading Python runtime...</p>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <section class="section">
+        <div class="container">
+            <!-- Header -->
+            <div class="has-text-centered mb-6">
+                <h1 class="title is-2">
+                    <i class="fas fa-microscope"></i> Datasculpt Inspector
+                </h1>
+                <p class="subtitle is-5">
+                    Analyze dataset structure entirely in your browser. Your data never leaves your machine.
+                </p>
+            </div>
+
+            <!-- Upload Zone -->
+            <div id="upload-section" class="box upload-zone mb-6">
+                <div class="has-text-centered">
+                    <p class="mb-4">
+                        <i class="fas fa-cloud-upload-alt fa-3x has-text-grey-light"></i>
+                    </p>
+                    <p class="is-size-5 mb-3">Drag & drop a CSV or Excel file here</p>
+                    <p class="has-text-grey mb-4">or</p>
+                    <div class="file is-boxed is-centered is-primary">
+                        <label class="file-label">
+                            <input class="file-input" type="file" id="file-input" accept=".csv,.xlsx,.xls">
+                            <span class="file-cta">
+                                <span class="file-icon">
+                                    <i class="fas fa-upload"></i>
+                                </span>
+                                <span class="file-label">Choose a file</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processing indicator -->
+            <div id="processing-section" class="is-hidden mb-6">
+                <div class="processing-box has-text-centered">
+                    <div class="processing-spinner"></div>
+                    <p id="processing-status" class="processing-status">Analyzing dataset...</p>
+                    <p class="processing-substatus">This may take a moment for large files</p>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div id="results-section" class="is-hidden">
+                <!-- File Info -->
+                <div class="box mb-5">
+                    <div class="level">
+                        <div class="level-left">
+                            <div class="level-item">
+                                <div>
+                                    <p class="heading">File</p>
+                                    <p id="file-name" class="title is-6">-</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="level-item has-text-centered">
+                            <div>
+                                <p class="heading">Rows</p>
+                                <p id="row-count" class="title is-6">-</p>
+                            </div>
+                        </div>
+                        <div class="level-item has-text-centered">
+                            <div>
+                                <p class="heading">Columns</p>
+                                <p id="col-count" class="title is-6">-</p>
+                            </div>
+                        </div>
+                        <div class="level-right">
+                            <div class="level-item">
+                                <button id="new-file-btn" class="button is-light">
+                                    <span class="icon"><i class="fas fa-redo"></i></span>
+                                    <span>Analyze Another File</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shape Detection -->
+                <div class="box mb-5">
+                    <h2 class="title is-4 mb-4">
+                        <i class="fas fa-shapes"></i> Shape Detection
+                    </h2>
+                    <div id="shape-hypotheses" class="columns is-multiline">
+                        <!-- Shape cards rendered here -->
+                    </div>
+                </div>
+
+                <!-- Grain Detection -->
+                <div class="box mb-5">
+                    <h2 class="title is-4 mb-4">
+                        <i class="fas fa-key"></i> Grain Detection
+                    </h2>
+                    <div id="grain-result">
+                        <!-- Grain info rendered here -->
+                    </div>
+                </div>
+
+                <!-- Column Roles -->
+                <div class="box mb-5">
+                    <h2 class="title is-4 mb-4">
+                        <i class="fas fa-columns"></i> Column Roles
+                    </h2>
+                    <div id="column-cards" class="columns is-multiline">
+                        <!-- Column cards rendered here -->
+                    </div>
+                </div>
+
+                <!-- Diagnostics -->
+                <div id="diagnostics-section" class="box mb-5 is-hidden">
+                    <h2 class="title is-4 mb-4">
+                        <i class="fas fa-exclamation-triangle"></i> Diagnostics
+                    </h2>
+                    <div id="diagnostics-content">
+                        <!-- Warnings rendered here -->
+                    </div>
+                </div>
+
+                <!-- Questions Section (for interactive mode) -->
+                <div id="questions-section" class="box mb-5 is-hidden">
+                    <h2 class="title is-4 mb-4">
+                        <i class="fas fa-question-circle"></i> Clarification Needed
+                    </h2>
+                    <p class="mb-4">Please answer the following questions to improve the analysis:</p>
+                    <div id="questions-container">
+                        <!-- Question cards rendered here -->
+                    </div>
+                    <div class="has-text-centered mt-4">
+                        <button id="apply-answers-btn" class="button is-primary is-medium">
+                            <span class="icon"><i class="fas fa-check"></i></span>
+                            <span>Apply Answers & Re-analyze</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Export Section -->
+                <div class="box">
+                    <div class="level">
+                        <div class="level-left">
+                            <div class="level-item">
+                                <h2 class="title is-4 mb-0">
+                                    <i class="fas fa-download"></i> Export Results
+                                </h2>
+                            </div>
+                        </div>
+                        <div class="level-right">
+                            <div class="level-item">
+                                <button id="export-btn" class="button is-success">
+                                    <span class="icon"><i class="fas fa-file-export"></i></span>
+                                    <span>Download JSON</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="content has-text-centered">
+            <p>
+                <strong>Datasculpt Inspector</strong> - Browser-based dataset structure analysis.
+                <br>
+                Data is processed entirely in your browser and never sent to any server.
+            </p>
+        </div>
+    </footer>
+
+    <!-- PyScript Configuration -->
+    <script type="py" src="py/main.py" config="pyscript.toml"></script>
+</body>
+</html>
