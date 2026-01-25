@@ -1,10 +1,12 @@
-name: Deploy Inspector to GitHub Pages
+name: Deploy Docs and Inspector to GitHub Pages
 
 on:
   push:
     branches: [master]
     paths:
+      - 'docs/**'
       - 'contrib/inspector/**'
+      - 'mkdocs.yml'
       - '.github/workflows/deploy-inspector.yml'
   workflow_dispatch:
 
@@ -29,13 +31,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install mkdocs
+        run: pip install mkdocs-material
+
+      - name: Build docs
+        run: mkdocs build
+
+      - name: Copy inspector to demo/
+        run: cp -r contrib/inspector site/demo
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './contrib/inspector'
+          path: './site'
 
       - name: Deploy to GitHub Pages
         id: deployment
