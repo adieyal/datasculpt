@@ -4,7 +4,6 @@ This module initializes the application, sets up event handlers,
 and orchestrates the user workflow.
 """
 
-
 from typing import Any
 
 # Global state
@@ -307,7 +306,7 @@ def initialize() -> None:
     """Initialize the Datasculpt Inspector application."""
     from ui_renderer import hide_loading, update_loading_status
 
-    update_loading_status("Setting up event handlers...")
+    update_loading_status("Setting up...")
 
     # Set up event handlers
     setup_event_handlers()

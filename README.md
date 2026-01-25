@@ -47,6 +47,10 @@ for col in result.proposal.columns:
 # unemployed: measure
 ```
 
+## Try It
+
+🔬 **[Live Demo](https://adieyal.github.io/datasculpt/demo/)** — Analyze datasets in your browser. No installation, no data leaves your machine.
+
 ## Documentation
 
 📚 **[Full Documentation](https://adieyal.github.io/datasculpt/)**
