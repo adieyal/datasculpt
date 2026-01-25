@@ -9,6 +9,37 @@ Datasculpt infers the structural intent of tabular datasets before they enter se
 !!! note "About the Demo"
     The demo uses [Pyodide](https://pyodide.org/) to run Python entirely in your browser. This is for demonstration purposes only. In production, Datasculpt is designed to run server-side where it can process larger datasets efficiently and integrate with your data pipelines.
 
+## When to Use Datasculpt
+
+Datasculpt is designed for these scenarios:
+
+- **Ingesting unfamiliar datasets** — When you receive data from external sources and need to understand its structure before processing
+- **Building data pipelines** — When your pipelines need structural metadata to route, validate, or transform data correctly
+- **Governance workflows** — When you need audit trails showing how structural decisions were made
+- **Catalog registration** — When preparing datasets for registration in data catalogs like [Invariant](https://github.com/invariant-labs)
+
+## When Not to Use Datasculpt
+
+Datasculpt may not be the right tool if:
+
+- **Schema is already known** — If you have explicit schema definitions, use them directly
+- **One-off exploration** — For quick data exploration, tools like pandas profiling are simpler
+- **Real-time streaming** — Datasculpt processes complete files, not streaming data
+- **Non-tabular data** — JSON documents, images, unstructured text, and other non-tabular formats are out of scope
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A[CSV/Excel/Parquet] --> B[Evidence Extraction]
+    B --> C[Shape Detection]
+    C --> D[Role Assignment]
+    D --> E[Grain Inference]
+    E --> F[InvariantProposal]
+```
+
+Each stage builds on the previous, producing a complete structural description with a decision record explaining every inference.
+
 ## Who This Documentation Is For
 
 | You are... | Start here |

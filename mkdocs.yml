@@ -71,6 +71,8 @@ nav:
       - Configuration: reference/configuration.md
       - CLI: reference/cli.md
       - Glossary: reference/glossary.md
+      - Troubleshooting: troubleshooting.md
+      - Changelog: changelog.md
 
 markdown_extensions:
   # Admonitions
