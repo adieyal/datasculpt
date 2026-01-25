@@ -1,19 +1,16 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-import numpy as np
 import pandas as pd
-
 
 # ----------------------------
 # Fixtures
 # ----------------------------
 
-def make_fixtures(out_dir: Path) -> Dict[str, Path]:
+def make_fixtures(out_dir: Path) -> dict[str, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) Wide observations: dims + measures
@@ -72,7 +69,7 @@ def make_fixtures(out_dir: Path) -> Dict[str, Path]:
 # Frictionless tests
 # ----------------------------
 
-def run_frictionless(csv_path: Path) -> Dict[str, Any]:
+def run_frictionless(csv_path: Path) -> dict[str, Any]:
     """
     Uses frictionless to infer a schema from CSV.
     """
@@ -115,7 +112,7 @@ def run_frictionless(csv_path: Path) -> Dict[str, Any]:
 # ydata-profiling (optional)
 # ----------------------------
 
-def run_ydata_profiling(csv_path: Path, out_html: Path) -> Dict[str, Any]:
+def run_ydata_profiling(csv_path: Path, out_html: Path) -> dict[str, Any]:
     """
     Generates an HTML profiling report. Optional.
     """
@@ -162,7 +159,7 @@ def _extract_dp_columns(report: Any) -> list[dict]:
 
     return []
 
-def run_dataprofiler(csv_path: Path) -> Dict[str, Any]:
+def run_dataprofiler(csv_path: Path) -> dict[str, Any]:
     try:
         from dataprofiler import Profiler
     except Exception:
@@ -231,7 +228,7 @@ def main():
     out_dir = Path("tmp_shape_lib_tests")
     fixtures = make_fixtures(out_dir)
 
-    results: Dict[str, Any] = {"fixtures": {k: str(v) for k, v in fixtures.items()}, "runs": {}}
+    results: dict[str, Any] = {"fixtures": {k: str(v) for k, v in fixtures.items()}, "runs": {}}
 
     for name, path in fixtures.items():
         print(f"\n=== Fixture: {name} ({path.name}) ===")
@@ -306,39 +303,6 @@ def _safe_obj(obj):
         if isinstance(v, (str, int, float, bool)) or v is None:
             out[k] = v
     return out or str(obj)
-
-
-def run_frictionless(csv_path: Path) -> Dict[str, Any]:
-    """
-    Uses frictionless to infer a schema from CSV.
-    """
-    try:
-        import frictionless as fl
-    except Exception as e:
-        return {"error": f"Failed to import frictionless: {e}"}
-
-    resource = fl.Resource(path=str(csv_path))
-    resource.infer()
-
-    schema = resource.schema
-    fields = []
-    for f in schema.fields:
-        fields.append({
-            "name": f.name,
-            "type": f.type,
-            "format": getattr(f, "format", None),
-            "constraints": f.constraints or {},
-        })
-
-    return {
-        "path": str(csv_path),
-        "frictionless": {
-            "version": getattr(fl, "__version__", "unknown"),
-            "dialect": _safe_obj(getattr(resource, "dialect", None)),
-            "fields": fields,
-        }
-    }
-
 
 
 if __name__ == "__main__":

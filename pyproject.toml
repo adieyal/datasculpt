@@ -83,6 +83,9 @@ select = [
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
+    "ARG001", # unused function argument (intentional for stubs/placeholders)
+    "SIM102", # nested if statements (sometimes clearer)
+    "UP007",  # Union syntax (compatibility)
 ]
 
 [tool.ruff.lint.isort]

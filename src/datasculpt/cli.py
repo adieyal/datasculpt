@@ -16,8 +16,6 @@ from typing import Any
 from datasculpt.core import (
     ColumnSpec,
     DatasetKind,
-    GrainInference,
-    InferenceConfig,
     InvariantProposal,
     Role,
     ShapeHypothesis,
@@ -27,15 +25,12 @@ from datasculpt.core import (
 from datasculpt.core.evidence import extract_dataframe_evidence
 from datasculpt.core.roles import assign_roles, update_evidence_with_roles
 from datasculpt.intake import (
-    ColumnStats,
-    DatasetPreview,
     IntakeError,
     IntakeResult,
     intake_file,
 )
-from datasculpt.pipeline import InferenceResult, infer, apply_answers
-from datasculpt.proposal import ProposalDiff, diff_proposals, ColumnChangeType
-
+from datasculpt.pipeline import apply_answers, infer
+from datasculpt.proposal import ColumnChangeType, ProposalDiff, diff_proposals
 
 # Exit codes
 EXIT_SUCCESS = 0
@@ -88,7 +83,7 @@ def _run_inference(path: Path) -> tuple[IntakeResult, InvariantProposal]:
             break
 
     # Update evidence with role scores
-    for name, evidence in column_evidence.items():
+    for _name, evidence in column_evidence.items():
         update_evidence_with_roles(evidence, has_indicator_column=has_indicator)
 
     # Detect shape
