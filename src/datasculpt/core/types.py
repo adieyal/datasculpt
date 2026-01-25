@@ -72,6 +72,66 @@ class QuestionType(str, Enum):
 
 
 @dataclass
+class ValueProfile:
+    """Distribution shape information for a column.
+
+    Provides discriminators beyond distinct_ratio that help distinguish
+    codes vs measures, flags, weights vs denominators, probabilities vs counts.
+    """
+
+    min_value: float | None = None
+    max_value: float | None = None
+    mean: float | None = None  # Numeric columns only
+
+    # Ratio of values close to integers (within 1e-9)
+    integer_ratio: float = 0.0
+
+    # Ratio of values >= 0
+    non_negative_ratio: float = 0.0
+
+    # Ratio of values in [0, 1]
+    bounded_0_1_ratio: float = 0.0
+
+    # Ratio of values in [0, 100]
+    bounded_0_100_ratio: float = 0.0
+
+    # True if unique_count <= 5
+    low_cardinality: bool = False
+
+    # True if null_rate > 0.8
+    mostly_null: bool = False
+
+
+@dataclass
+class ArrayProfile:
+    """Profile for array-type columns.
+
+    Captures array length statistics to inform series detection.
+    """
+
+    avg_length: float = 0.0
+    min_length: int = 0
+    max_length: int = 0
+
+    # True if max_length - min_length <= 1
+    consistent_length: bool = False
+
+
+@dataclass
+class ParseResults:
+    """Results from parsing attempts on a column."""
+
+    # Date parsing
+    date_parse_rate: float = 0.0
+    has_time: bool = False
+    best_date_format: str | None = None
+    date_failure_examples: list[str] = field(default_factory=list)
+
+    # JSON array detection
+    json_array_rate: float = 0.0
+
+
+@dataclass
 class ColumnEvidence:
     """Normalized evidence about a column."""
 
@@ -82,9 +142,22 @@ class ColumnEvidence:
     # Statistics
     null_rate: float = 0.0
     distinct_ratio: float = 0.0
+    unique_count: int = 0
 
-    # Parse attempt results (parser_name -> success_rate)
-    parse_results: dict[str, float] = field(default_factory=dict)
+    # Value distribution profile
+    value_profile: ValueProfile = field(default_factory=ValueProfile)
+
+    # Array profile (only populated if structural_type is ARRAY)
+    array_profile: ArrayProfile | None = None
+
+    # Header signals
+    header_date_like: bool = False
+
+    # Parse attempt results
+    parse_results: ParseResults = field(default_factory=ParseResults)
+
+    # Legacy parse_results dict (for backwards compatibility during transition)
+    parse_results_dict: dict[str, float] = field(default_factory=dict)
 
     # Role likelihoods (Role -> score)
     role_scores: dict[Role, float] = field(default_factory=dict)

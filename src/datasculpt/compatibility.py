@@ -273,17 +273,13 @@ def _extract_time_columns(spec: DatasetSpec) -> list[str]:
 
     if isinstance(spec, InvariantProposal):
         for col in spec.columns:
-            if col.role == Role.TIME:
-                time_columns.append(col.name)
-            elif col.primitive_type in (PrimitiveType.DATE, PrimitiveType.DATETIME):
+            if col.role == Role.TIME or col.primitive_type in (PrimitiveType.DATE, PrimitiveType.DATETIME):
                 time_columns.append(col.name)
     else:
         # DecisionRecord
         for name, evidence in spec.column_evidence.items():
             time_score = evidence.role_scores.get(Role.TIME, 0.0)
-            if time_score >= 0.3:
-                time_columns.append(name)
-            elif evidence.primitive_type in (PrimitiveType.DATE, PrimitiveType.DATETIME):
+            if time_score >= 0.3 or evidence.primitive_type in (PrimitiveType.DATE, PrimitiveType.DATETIME):
                 time_columns.append(name)
 
     return time_columns
@@ -355,10 +351,7 @@ def _types_compatible(type1: PrimitiveType, type2: PrimitiveType) -> bool:
         return True
 
     # Unknown is compatible with anything (assume user knows what they're doing)
-    if type1 == PrimitiveType.UNKNOWN or type2 == PrimitiveType.UNKNOWN:
-        return True
-
-    return False
+    return bool(type1 == PrimitiveType.UNKNOWN or type2 == PrimitiveType.UNKNOWN)
 
 
 def _granularity_compatible(
@@ -514,10 +507,7 @@ def check_grain_compatibility(
     total_grain_cols = len(set(left_grain) | set(right_grain))
     matched_grain_cols = len(matching_columns)
 
-    if total_grain_cols == 0:
-        score = 0.0
-    else:
-        score = matched_grain_cols / total_grain_cols
+    score = 0.0 if total_grain_cols == 0 else matched_grain_cols / total_grain_cols
 
     # Determine overall compatibility
     has_errors = any(i.severity == Severity.ERROR for i in issues)
@@ -980,8 +970,8 @@ def _check_example_overlap(values: list[str], examples: list[str]) -> float:
     if not examples:
         return 0.0
 
-    value_set = set(str(v).upper() for v in values)
-    example_set = set(str(e).upper() for e in examples)
+    value_set = {str(v).upper() for v in values}
+    example_set = {str(e).upper() for e in examples}
 
     overlap = value_set & example_set
     return len(overlap) / len(example_set)

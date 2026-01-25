@@ -12,10 +12,12 @@ Key improvements over naive name-matching:
 
 from __future__ import annotations
 
+import contextlib
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from datasculpt.core.types import ColumnEvidence
@@ -242,10 +244,8 @@ def compute_value_distribution(
         if isinstance(v, (int, float)) and not isinstance(v, bool):
             numeric_values.append(float(v))
         elif isinstance(v, str):
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 numeric_values.append(float(v))
-            except (ValueError, TypeError):
-                pass
 
     if len(numeric_values) >= len(non_null) * 0.9:
         dist.is_numeric = True
@@ -266,7 +266,7 @@ def compute_value_distribution(
     # Boolean-like detection
     boolean_markers = {
         True, False, "true", "false", "True", "False", "TRUE", "FALSE",
-        0, 1, "0", "1", "yes", "no", "Yes", "No", "YES", "NO",
+        "0", "1", "yes", "no", "Yes", "No", "YES", "NO",
         "y", "n", "Y", "N",
         "suppressed", "Suppressed", "SUPPRESSED",
         "masked", "Masked", "MASKED",
@@ -283,10 +283,7 @@ def compute_value_distribution(
     if 2 <= dist.cardinality <= 10:
         string_values = [str(v).strip() for v in unique_values]
         # Check for letter grades
-        if all(len(s) == 1 and s.isalpha() for s in string_values):
-            dist.is_ordinal_codes = True
-        # Check for small integer codes
-        elif all(s.isdigit() and 0 <= int(s) <= 10 for s in string_values):
+        if all(len(s) == 1 and s.isalpha() for s in string_values) or all(s.isdigit() and 0 <= int(s) <= 10 for s in string_values):
             dist.is_ordinal_codes = True
         # Check for quality descriptors
         quality_terms = {"good", "fair", "poor", "excellent", "high", "low", "medium"}
@@ -358,8 +355,7 @@ def compute_null_correlation(
 
     # Identify "suppressed" markers
     suppressed_markers = {
-        True, "true", "True", "TRUE", "1", 1,
-        "yes", "Yes", "YES", "y", "Y",
+        True, "true", "True", "TRUE", "1", "yes", "Yes", "YES", "y", "Y",
         "suppressed", "Suppressed", "SUPPRESSED",
         "masked", "Masked", "MASKED",
         "redacted", "Redacted", "REDACTED",
@@ -370,7 +366,7 @@ def compute_null_correlation(
     not_suppressed_count = 0
     not_suppressed_null_count = 0
 
-    for supp_val, meas_val in zip(suppression_values, measure_values):
+    for supp_val, meas_val in zip(suppression_values, measure_values, strict=False):
         is_suppressed = supp_val in suppressed_markers
         is_null = meas_val is None or meas_val == ""
 
@@ -449,21 +445,20 @@ def score_weight_candidate(
         evidence_list.append("type:numeric")
 
     # Value-based scoring
-    if value_dist is not None:
-        if value_dist.is_numeric:
-            if value_dist.is_non_negative:
-                score += 0.15
-                evidence_list.append("value:non_negative")
+    if value_dist is not None and value_dist.is_numeric:
+        if value_dist.is_non_negative:
+            score += 0.15
+            evidence_list.append("value:non_negative")
 
-            # Survey weights are often floats, not integers
-            if not value_dist.is_integer_like:
-                score += 0.10
-                evidence_list.append("value:not_integer_like")
+        # Survey weights are often floats, not integers
+        if not value_dist.is_integer_like:
+            score += 0.10
+            evidence_list.append("value:not_integer_like")
 
-            # Weights typically aren't bounded to 0-1 (those are probabilities)
-            if not value_dist.is_bounded_01 and value_dist.is_non_negative:
-                score += 0.05
-                evidence_list.append("value:not_probability_like")
+        # Weights typically aren't bounded to 0-1 (those are probabilities)
+        if not value_dist.is_bounded_01 and value_dist.is_non_negative:
+            score += 0.05
+            evidence_list.append("value:not_probability_like")
 
     return SpecialColumnCandidate(
         flag_type=SpecialColumnType.WEIGHT,
@@ -524,16 +519,15 @@ def score_denominator_candidate(
         evidence_list.append("type:numeric")
 
     # Value-based scoring
-    if value_dist is not None:
-        if value_dist.is_numeric:
-            if value_dist.is_non_negative:
-                score += 0.10
-                evidence_list.append("value:non_negative")
+    if value_dist is not None and value_dist.is_numeric:
+        if value_dist.is_non_negative:
+            score += 0.10
+            evidence_list.append("value:non_negative")
 
-            # Denominators are usually integers
-            if value_dist.is_integer_like:
-                score += 0.10
-                evidence_list.append("value:integer_like")
+        # Denominators are usually integers
+        if value_dist.is_integer_like:
+            score += 0.10
+            evidence_list.append("value:integer_like")
 
     # No name signal at all - don't proceed
     if not (strong_matches or moderate_matches or weak_matches):

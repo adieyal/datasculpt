@@ -15,13 +15,16 @@ from typing import Any
 from uuid import uuid4
 
 from datasculpt.core.types import (
+    ArrayProfile,
     ColumnEvidence,
     DecisionRecord,
     DecisionRecordSummary,
     GrainInference,
     HypothesisScore,
+    ParseResults,
     Question,
     ShapeHypothesis,
+    ValueProfile,
 )
 
 # Standard location for storing decision records
@@ -291,13 +294,59 @@ def _deserialize_column_evidence(data: dict[str, Any]) -> ColumnEvidence:
     for role_str, score in data.get("role_scores", {}).items():
         role_scores[Role(role_str)] = score
 
+    # Handle ParseResults - can be dict (legacy) or dataclass-serialized
+    parse_results_data = data.get("parse_results", {})
+    if isinstance(parse_results_data, dict):
+        parse_results = ParseResults(
+            date_parse_rate=parse_results_data.get("date_parse_rate", 0.0),
+            has_time=parse_results_data.get("has_time", False),
+            best_date_format=parse_results_data.get("best_date_format"),
+            date_failure_examples=parse_results_data.get("date_failure_examples", []),
+            json_array_rate=parse_results_data.get("json_array_rate", 0.0),
+        )
+    else:
+        parse_results = ParseResults()
+
+    # Handle ValueProfile
+    value_profile_data = data.get("value_profile", {})
+    if isinstance(value_profile_data, dict):
+        value_profile = ValueProfile(
+            min_value=value_profile_data.get("min_value"),
+            max_value=value_profile_data.get("max_value"),
+            mean=value_profile_data.get("mean"),
+            integer_ratio=value_profile_data.get("integer_ratio", 0.0),
+            non_negative_ratio=value_profile_data.get("non_negative_ratio", 0.0),
+            bounded_0_1_ratio=value_profile_data.get("bounded_0_1_ratio", 0.0),
+            bounded_0_100_ratio=value_profile_data.get("bounded_0_100_ratio", 0.0),
+            low_cardinality=value_profile_data.get("low_cardinality", False),
+            mostly_null=value_profile_data.get("mostly_null", False),
+        )
+    else:
+        value_profile = ValueProfile()
+
+    # Handle ArrayProfile (optional)
+    array_profile_data = data.get("array_profile")
+    array_profile = None
+    if isinstance(array_profile_data, dict):
+        array_profile = ArrayProfile(
+            avg_length=array_profile_data.get("avg_length", 0.0),
+            min_length=array_profile_data.get("min_length", 0),
+            max_length=array_profile_data.get("max_length", 0),
+            consistent_length=array_profile_data.get("consistent_length", False),
+        )
+
     return ColumnEvidence(
         name=data["name"],
         primitive_type=PrimitiveType(data["primitive_type"]),
         structural_type=StructuralType(data["structural_type"]),
         null_rate=data.get("null_rate", 0.0),
         distinct_ratio=data.get("distinct_ratio", 0.0),
-        parse_results=data.get("parse_results", {}),
+        unique_count=data.get("unique_count", 0),
+        value_profile=value_profile,
+        array_profile=array_profile,
+        header_date_like=data.get("header_date_like", False),
+        parse_results=parse_results,
+        parse_results_dict=data.get("parse_results_dict", {}),
         role_scores=role_scores,
         external=data.get("external", {}),
         notes=data.get("notes", []),

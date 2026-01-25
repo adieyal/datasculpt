@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from datasculpt.core.roles import (
     RoleAssignment,
     assign_roles,
@@ -20,10 +18,11 @@ from datasculpt.core.roles import (
 )
 from datasculpt.core.types import (
     ColumnEvidence,
-    InferenceConfig,
+    ParseResults,
     PrimitiveType,
     Role,
     StructuralType,
+    ValueProfile,
 )
 
 
@@ -33,7 +32,8 @@ def make_evidence(
     structural_type: StructuralType = StructuralType.SCALAR,
     null_rate: float = 0.0,
     distinct_ratio: float = 0.5,
-    parse_results: dict[str, float] | None = None,
+    parse_results: ParseResults | None = None,
+    parse_results_dict: dict[str, float] | None = None,
     role_scores: dict[Role, float] | None = None,
 ) -> ColumnEvidence:
     """Helper to create ColumnEvidence for testing."""
@@ -43,7 +43,9 @@ def make_evidence(
         structural_type=structural_type,
         null_rate=null_rate,
         distinct_ratio=distinct_ratio,
-        parse_results=parse_results or {},
+        value_profile=ValueProfile(),
+        parse_results=parse_results or ParseResults(),
+        parse_results_dict=parse_results_dict or {},
         role_scores=role_scores or {},
     )
 
@@ -322,7 +324,7 @@ class TestScoreSeriesRole:
         """High JSON array parse success boosts score."""
         evidence = make_evidence(
             name="values",
-            parse_results={"json_array": 0.95},
+            parse_results=ParseResults(json_array_rate=0.95),
         )
         score = score_series_role(evidence)
         assert score >= 0.4

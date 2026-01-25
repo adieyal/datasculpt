@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from datasculpt.core.grain import (
     GrainInference,
@@ -656,7 +655,7 @@ class TestBestComboSelection:
         # Combo with pseudo-key
         score_with_pseudo = score_key_combo(df, ["row_id", "country"], candidates, 1.0)
         # Combo without pseudo-key (hypothetical)
-        score_without = score_key_combo(df, ["country"], candidates, 0.5)
+        score_key_combo(df, ["country"], candidates, 0.5)
         # The pseudo-key penalty should affect the score
         assert score_with_pseudo < 1.0
 
@@ -740,7 +739,7 @@ class TestGrainInferenceWithDiagnostics:
         })
         result = infer_grain(df)
         # Should have some warning about pseudo-key
-        evidence_text = " ".join(result.evidence)
+        " ".join(result.evidence)
         # Confidence should be reduced
         assert result.confidence < 1.0
 
@@ -752,6 +751,6 @@ class TestGrainInferenceWithDiagnostics:
             "constant": ["X", "X", "X", "X"],
         })
         # Force composite key search by not having single unique column
-        result = infer_grain(df)
+        infer_grain(df)
         # If minimization happened, it should be noted
         # (depends on whether constant gets included initially)

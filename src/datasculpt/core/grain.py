@@ -146,10 +146,7 @@ def _detect_uuid_like(series: pd.Series) -> bool:
         return False
 
     # Check uniqueness - should be 100% unique
-    if series.nunique() != len(series):
-        return False
-
-    return True
+    return series.nunique() == len(series)
 
 
 def _detect_ingestion_timestamp(series: pd.Series, name: str) -> bool:
@@ -313,9 +310,7 @@ def rank_key_candidates(
                 # Extra boost for key/dimension/time roles
                 if primary_role == Role.KEY:
                     score += 0.2
-                elif primary_role == Role.DIMENSION:
-                    score += 0.15
-                elif primary_role == Role.TIME:
+                elif primary_role == Role.DIMENSION or primary_role == Role.TIME:
                     score += 0.15
                 elif primary_role == Role.INDICATOR_NAME:
                     # For long_indicators, indicator_name is critical

@@ -100,7 +100,7 @@ def safe_import(module_name: str) -> Any | None:
 
 def enrich_evidence(
     evidence: ColumnEvidence,
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     adapters: list[str] | None = None,
 ) -> ColumnEvidence:
     """Enrich ColumnEvidence with data from available adapters.
@@ -135,7 +135,7 @@ def enrich_evidence(
 
 def _enrich_from_adapter(
     evidence: ColumnEvidence,
-    df: "pd.DataFrame",
+    df: pd.DataFrame,
     adapter_name: str,
 ) -> None:
     """Enrich evidence using a specific adapter.
@@ -151,7 +151,7 @@ def _enrich_from_adapter(
         _enrich_from_dataprofiler(evidence, df)
 
 
-def _enrich_from_frictionless(evidence: ColumnEvidence, df: "pd.DataFrame") -> None:
+def _enrich_from_frictionless(evidence: ColumnEvidence, df: pd.DataFrame) -> None:
     """Enrich evidence using the frictionless adapter.
 
     Args:
@@ -160,6 +160,8 @@ def _enrich_from_frictionless(evidence: ColumnEvidence, df: "pd.DataFrame") -> N
     """
     from datasculpt.adapters.frictionless import (
         AVAILABLE as FRICTIONLESS_AVAILABLE,
+    )
+    from datasculpt.adapters.frictionless import (
         enrich_evidence_from_schema,
         infer_schema,
     )
@@ -172,7 +174,7 @@ def _enrich_from_frictionless(evidence: ColumnEvidence, df: "pd.DataFrame") -> N
         enrich_evidence_from_schema(evidence, schema)
 
 
-def _enrich_from_dataprofiler(evidence: ColumnEvidence, df: "pd.DataFrame") -> None:
+def _enrich_from_dataprofiler(evidence: ColumnEvidence, df: pd.DataFrame) -> None:
     """Enrich evidence using the dataprofiler adapter.
 
     Args:
@@ -181,6 +183,8 @@ def _enrich_from_dataprofiler(evidence: ColumnEvidence, df: "pd.DataFrame") -> N
     """
     from datasculpt.adapters.dataprofiler import (
         AVAILABLE as DATAPROFILER_AVAILABLE,
+    )
+    from datasculpt.adapters.dataprofiler import (
         enrich_evidence_from_statistics,
         get_column_statistics,
     )

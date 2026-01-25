@@ -8,7 +8,7 @@ question generation, decision recording, and proposal generation.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,7 @@ from datasculpt.core.types import (
     Role,
     ShapeHypothesis,
 )
-from datasculpt.intake import intake_file, IntakeResult
+from datasculpt.intake import IntakeResult, intake_file
 
 
 @dataclass
@@ -454,7 +454,7 @@ def infer(
         for ra in role_assignments.values()
     )
 
-    for col_name, evidence in column_evidence.items():
+    for _col_name, evidence in column_evidence.items():
         update_evidence_with_roles(evidence, config, has_indicator)
 
     # Step 4: Detect shape

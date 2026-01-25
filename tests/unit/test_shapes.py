@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from datasculpt.core.shapes import (
     ShapeResult,
     compare_hypotheses,

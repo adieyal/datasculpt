@@ -6,8 +6,8 @@ the best matching shape with confidence assessment.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from datasculpt.core.types import (
     ColumnEvidence,
@@ -153,7 +153,7 @@ def score_long_indicators(
     if len(measure_cols) > 1 and not value_cols:
         score -= 0.2
         reasons.append(
-            f"Multiple measure columns without value column suggests observations"
+            "Multiple measure columns without value column suggests observations"
         )
 
     # Penalty: no indicator column found
@@ -200,7 +200,7 @@ def score_wide_observations(
     measure_cols = _columns_with_role(columns, Role.MEASURE)
     dimension_cols = _columns_with_role(columns, Role.DIMENSION)
     key_cols = _columns_with_role(columns, Role.KEY)
-    time_cols = _columns_with_role(columns, Role.TIME)
+    _columns_with_role(columns, Role.TIME)
 
     # Core pattern: multiple measure columns
     if len(measure_cols) >= 2:
@@ -276,7 +276,7 @@ def score_wide_time_columns(
     score = 0.0
     reasons: list[str] = []
 
-    measure_cols = _columns_with_role(columns, Role.MEASURE)
+    _columns_with_role(columns, Role.MEASURE)
     dimension_cols = _columns_with_role(columns, Role.DIMENSION)
     indicator_cols = _columns_with_role(columns, Role.INDICATOR_NAME)
 
@@ -609,10 +609,7 @@ def _looks_like_time_header(name: str) -> bool:
         return True
 
     # Year-Month combo (2020-Jan, Jan-2020)
-    if re.match(r"^\d{4}[-_]?[A-Za-z]{3,}$", name) or re.match(r"^[A-Za-z]{3,}[-_]?\d{4}$", name):
-        return True
-
-    return False
+    return bool(re.match(r"^\d{4}[-_]?[A-Za-z]{3,}$", name) or re.match(r"^[A-Za-z]{3,}[-_]?\d{4}$", name))
 
 
 def _is_mostly_contiguous(indices: list[int]) -> bool:

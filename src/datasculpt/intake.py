@@ -269,10 +269,7 @@ def generate_preview(
     n_cols = len(df.columns)
 
     # Sample rows
-    if n_rows <= sample_rows:
-        samples = df.head(sample_rows)
-    else:
-        samples = df.head(sample_rows)
+    samples = df.head(sample_rows) if n_rows <= sample_rows else df.head(sample_rows)
 
     # Convert sample to list of dicts, handling NaN values
     sample_records = samples.where(pd.notna(samples), None).to_dict(orient="records")

@@ -25,7 +25,7 @@ from datasculpt.core.types import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    pass
 
 # Try to import jsonschema for validation, fall back to manual validation
 try:

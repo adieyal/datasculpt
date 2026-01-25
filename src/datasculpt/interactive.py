@@ -10,6 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from datasculpt.core.time import GranularityResult, TimeGranularity
 from datasculpt.core.types import (
     ColumnEvidence,
     GrainInference,
@@ -18,8 +19,6 @@ from datasculpt.core.types import (
     Role,
     ShapeHypothesis,
 )
-from datasculpt.core.time import GranularityResult, TimeGranularity
-
 
 # Default confidence threshold for generating questions
 DEFAULT_CONFIDENCE_THRESHOLD = 0.7
@@ -679,7 +678,7 @@ def apply_constraints_to_evidence(
         if col_name in evidence:
             col_evidence = evidence[col_name]
             # Set all role scores to 0.0
-            col_evidence.role_scores = {role: 0.0 for role in Role}
+            col_evidence.role_scores = dict.fromkeys(Role, 0.0)
             # Set locked role to 1.0
             col_evidence.role_scores[locked_role] = 1.0
             # Add note about override

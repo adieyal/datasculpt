@@ -17,8 +17,7 @@ from datasculpt.core.types import (
     Role,
     ShapeHypothesis,
 )
-from datasculpt.pipeline import infer, InferenceResult
-
+from datasculpt.pipeline import InferenceResult, infer
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -187,7 +186,7 @@ class TestWideTimeColumnsPipeline:
 
         # Time columns should be detected by their names (2024-01, 2024-02, etc.)
         time_columns = [
-            name for name in evidence.keys()
+            name for name in evidence
             if name.startswith("2024-")
         ]
         assert len(time_columns) == 6, f"Expected 6 time columns, got {len(time_columns)}"

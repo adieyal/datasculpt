@@ -211,11 +211,11 @@ def score_key_role(
 
     # Check for monotonic sequence signal (if available from evidence profiler)
     # This catches 1, 2, 3, ... N row indices
-    if evidence.parse_results.get("monotonic_sequence", 0.0) > 0.9:
+    if evidence.parse_results_dict.get("monotonic_sequence", 0.0) > 0.9:
         score -= 0.5
 
     # Check for UUID/hash-like signal (high entropy hex patterns)
-    if evidence.parse_results.get("uuid_like", 0.0) > 0.9:
+    if evidence.parse_results_dict.get("uuid_like", 0.0) > 0.9:
         score -= 0.4
 
     return _clamp(score)
@@ -397,11 +397,9 @@ def score_time_role(evidence: ColumnEvidence) -> float:
     if evidence.primitive_type in (PrimitiveType.DATE, PrimitiveType.DATETIME):
         score += 0.6
 
-    # Successful date/datetime parsing - use max, not sum
-    # These are overlapping signals, so we take the stronger one
-    date_parse_success = evidence.parse_results.get("date", 0.0)
-    datetime_parse_success = evidence.parse_results.get("datetime", 0.0)
-    best_parse = max(date_parse_success, datetime_parse_success)
+    # Successful date/datetime parsing - use the date_parse_rate which covers both
+    # (the has_time flag indicates if it's datetime vs date-only)
+    best_parse = evidence.parse_results.date_parse_rate
 
     if best_parse >= 0.9:
         score += 0.25
@@ -642,7 +640,7 @@ def score_series_role(evidence: ColumnEvidence) -> float:
         score += 0.5
 
     # Successful JSON array parsing
-    json_array_success = evidence.parse_results.get("json_array", 0.0)
+    json_array_success = evidence.parse_results.json_array_rate
     if json_array_success >= 0.9:
         score += 0.4
     elif json_array_success >= 0.5:
@@ -814,13 +812,13 @@ def resolve_role(
 
     # Build explanatory reasons
     if _matches_any_pattern(evidence.name, KEY_NAME_PATTERNS):
-        reasons.append(f"name matches key pattern (*_id, *_code)")
+        reasons.append("name matches key pattern (*_id, *_code)")
     if _matches_any_pattern(evidence.name, TIME_NAME_PATTERNS):
-        reasons.append(f"name matches time pattern (date, time, year)")
+        reasons.append("name matches time pattern (date, time, year)")
     if _matches_any_pattern(evidence.name, INDICATOR_NAME_PATTERNS):
-        reasons.append(f"name matches indicator pattern")
+        reasons.append("name matches indicator pattern")
     if _matches_any_pattern(evidence.name, VALUE_NAME_PATTERNS):
-        reasons.append(f"name matches value pattern")
+        reasons.append("name matches value pattern")
 
     pseudo_penalty = _get_pseudo_key_penalty(evidence.name)
     if pseudo_penalty > 0:
@@ -831,10 +829,7 @@ def resolve_role(
     elif evidence.distinct_ratio <= 0.05:
         reasons.append(f"low cardinality ({evidence.distinct_ratio:.2%})")
 
-    date_parse = max(
-        evidence.parse_results.get("date", 0.0),
-        evidence.parse_results.get("datetime", 0.0),
-    )
+    date_parse = evidence.parse_results.date_parse_rate
     if date_parse >= 0.5:
         reasons.append(f"date parse: {date_parse:.2%}")
 
