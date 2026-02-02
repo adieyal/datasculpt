@@ -58,7 +58,7 @@ def _profile_with_ydata(df: pd.DataFrame) -> AdapterResult:
         description = profile.get_description()
 
         # Extract table-level statistics
-        if hasattr(description, "table"):
+        try:
             table_stats = description.table
             dataset_annotations["ydata_table_stats"] = {
                 "n_rows": table_stats.get("n", 0),
@@ -66,9 +66,11 @@ def _profile_with_ydata(df: pd.DataFrame) -> AdapterResult:
                 "n_missing_cells": table_stats.get("n_cells_missing", 0),
                 "n_duplicates": table_stats.get("n_duplicates", 0),
             }
+        except AttributeError:
+            pass
 
         # Extract per-column statistics
-        if hasattr(description, "variables"):
+        try:
             for col_name, col_desc in description.variables.items():
                 column_annotations[str(col_name)] = {
                     "ydata_type": col_desc.get("type", "Unknown"),
@@ -76,6 +78,8 @@ def _profile_with_ydata(df: pd.DataFrame) -> AdapterResult:
                     "ydata_n_missing": col_desc.get("n_missing"),
                     "ydata_is_unique": col_desc.get("is_unique", False),
                 }
+        except AttributeError:
+            pass
 
     except Exception as e:
         warnings.append(f"ydata-profiling profiling failed: {e}")
@@ -153,8 +157,11 @@ def get_variable_summary(df: pd.DataFrame, column: str) -> dict[str, Any] | None
         profile = ProfileReport(df[[column]], minimal=True, progress_bar=False)
         description = profile.get_description()
 
-        if hasattr(description, "variables") and column in description.variables:
-            return dict(description.variables[column])
+        try:
+            if column in description.variables:
+                return dict(description.variables[column])
+        except AttributeError:
+            pass
         return None
     except Exception:
         return None
@@ -185,10 +192,12 @@ def enrich_evidence_from_profile(
         profile = ProfileReport(df, minimal=True, progress_bar=False)
         description = profile.get_description()
 
-        if not hasattr(description, "variables"):
+        try:
+            variables = description.variables
+        except AttributeError:
             return column_evidence
 
-        for col_name, col_desc in description.variables.items():
+        for col_name, col_desc in variables.items():
             col_name_str = str(col_name)
             if col_name_str not in column_evidence:
                 continue

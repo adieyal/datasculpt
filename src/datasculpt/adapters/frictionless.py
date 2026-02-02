@@ -41,13 +41,21 @@ class FrictionlessAdapter(BaseAdapter):
                 warnings=["frictionless not installed; skipping adapter"]
             )
 
-        return _profile_with_frictionless(df)
+        from frictionless import Resource
+
+        return _profile_with_frictionless(df, Resource)
 
 
-def _profile_with_frictionless(df: pd.DataFrame) -> AdapterResult:
-    """Internal profiling implementation using frictionless."""
-    from frictionless import Resource, Schema
+def _profile_with_frictionless(df: pd.DataFrame, Resource: type) -> AdapterResult:
+    """Internal profiling implementation using frictionless.
 
+    Args:
+        df: The DataFrame to profile.
+        Resource: The frictionless Resource class.
+
+    Returns:
+        AdapterResult with inferred schema information.
+    """
     column_annotations: dict[str, dict[str, Any]] = {}
     dataset_annotations: dict[str, Any] = {}
     warnings: list[str] = []
@@ -55,13 +63,21 @@ def _profile_with_frictionless(df: pd.DataFrame) -> AdapterResult:
     try:
         resource = Resource(df)
         resource.infer()
-        schema: Schema = resource.schema
+        schema = resource.schema
 
         for field in schema.fields:
+            try:
+                field_format = field.format
+            except AttributeError:
+                field_format = None
+            try:
+                field_constraints = field.constraints
+            except AttributeError:
+                field_constraints = {}
             column_annotations[field.name] = {
                 "frictionless_type": field.type,
-                "frictionless_format": getattr(field, "format", None),
-                "frictionless_constraints": getattr(field, "constraints", {}),
+                "frictionless_format": field_format,
+                "frictionless_constraints": field_constraints,
             }
 
         dataset_annotations["frictionless_schema"] = schema.to_dict()
