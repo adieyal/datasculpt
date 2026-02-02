@@ -41,13 +41,26 @@ class DataProfilerAdapter(BaseAdapter):
                 warnings=["dataprofiler not installed; skipping adapter"]
             )
 
-        return _profile_with_dataprofiler(df)
+        from dataprofiler import Data, Profiler
+
+        return _profile_with_dataprofiler(df, Data, Profiler)
 
 
-def _profile_with_dataprofiler(df: pd.DataFrame) -> AdapterResult:
-    """Internal profiling implementation using dataprofiler."""
-    from dataprofiler import Data, Profiler
+def _profile_with_dataprofiler(
+    df: pd.DataFrame,
+    Data: type,
+    Profiler: type,
+) -> AdapterResult:
+    """Internal profiling implementation using dataprofiler.
 
+    Args:
+        df: The DataFrame to profile.
+        Data: The dataprofiler Data class.
+        Profiler: The dataprofiler Profiler class.
+
+    Returns:
+        AdapterResult with statistical annotations.
+    """
     column_annotations: dict[str, dict[str, Any]] = {}
     dataset_annotations: dict[str, Any] = {}
     warnings: list[str] = []

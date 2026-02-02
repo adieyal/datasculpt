@@ -17,8 +17,8 @@ import pandas as pd
 
 from datasculpt.core.evidence import extract_column_sample, extract_dataframe_evidence
 from datasculpt.core.grain import infer_grain
-from datasculpt.core.roles import assign_roles, update_evidence_with_roles
-from datasculpt.core.shapes import detect_shape
+from datasculpt.core.roles import RoleAssignment, assign_roles, update_evidence_with_roles
+from datasculpt.core.shapes import ShapeResult, detect_shape
 from datasculpt.core.types import (
     ColumnEvidence,
     ColumnSample,
@@ -211,10 +211,10 @@ def _generate_role_question(
 
 
 def _generate_questions(
-    shape_result: Any,  # ShapeResult from shapes module
+    shape_result: ShapeResult,
     grain: GrainInference,
     column_evidence: dict[str, ColumnEvidence],
-    role_assignments: dict[str, Any],  # RoleAssignment from roles module
+    role_assignments: dict[str, RoleAssignment],
     config: InferenceConfig,
 ) -> list[Question]:
     """Generate questions for ambiguous aspects of inference.
@@ -265,7 +265,7 @@ def _generate_questions(
 def _create_decision_record(
     decision_id: str,
     fingerprint: str,
-    shape_result: Any,  # ShapeResult
+    shape_result: ShapeResult,
     grain: GrainInference,
     column_evidence: dict[str, ColumnEvidence],
     questions: list[Question],
@@ -327,7 +327,7 @@ def _create_proposal(
     shape_hypothesis: ShapeHypothesis,
     grain: GrainInference,
     column_evidence: dict[str, ColumnEvidence],
-    role_assignments: dict[str, Any],  # RoleAssignment
+    role_assignments: dict[str, RoleAssignment],
     decision_id: str,
     questions: list[Question],
 ) -> InvariantProposal:
