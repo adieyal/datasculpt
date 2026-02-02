@@ -9,7 +9,7 @@ Datasculpt follows semantic versioning. This table shows the stability of differ
 | `infer()` function | **Stable** | Signature and return type will not change in minor versions |
 | `InferenceResult` | **Stable** | Core attributes (`shape`, `roles`, `grain`) stable |
 | `DecisionRecord` | **Stable** | Structure stable, new fields may be added |
-| Shape vocabulary | **Stable** | `wide_observations`, `long_indicators`, `wide_time_columns`, `series_column` |
+| Shape vocabulary | **Stable** | `wide_observations`, `long_indicators`, `wide_time_columns`, `series_column`, `microdata` |
 | Role vocabulary | **Evolving** | New roles may be added; existing roles stable |
 | Evidence types | **Evolving** | New evidence types may be added |
 | Internal APIs | **Unstable** | Modules under `_internal` may change without notice |
@@ -40,6 +40,40 @@ During the 0.x phase, the API is still being refined. We aim for stability but r
 ---
 
 ## Releases
+
+### Unreleased
+
+**Features:**
+
+- **Microdata shape detection:** New `microdata` shape hypothesis for survey/observation datasets (DHS, LSMS, MICS style)
+  - Detects coded question columns (s1aq1, v101, hv001)
+  - Identifies hierarchical ID structure (hhid + indiv)
+  - Recognizes geography hierarchies (zone, state, lga)
+  - Finds survey weight columns
+
+- **New role values for survey data:**
+  - `respondent_id`: Primary unit identifier (hhid, person_id)
+  - `subunit_id`: Secondary ID within unit (indiv, member_num)
+  - `cluster_id`: Sampling cluster/EA identifier
+  - `survey_weight`: Sampling weights
+  - `question_response`: Coded survey question answers
+  - `geography_level`: Administrative hierarchy levels
+
+- **Evidence contract expansion:**
+  - `ColumnEvidence` now includes `n_rows`, `n_non_null`, `top_values`, `value_length_stats`
+  - New `ColumnSample` dataclass for deterministic value sampling
+  - `InferenceConfig` supports `return_samples`, `sample_size`, `sample_seed` options
+  - `InferenceResult` includes optional `column_samples` dict
+
+- **New microdata module:** `datasculpt.core.microdata` with survey-specific detection functions
+  - `MicrodataLevel` enum (household, individual, episode, item)
+  - `MicrodataProfile` and `QuestionColumnProfile` dataclasses
+
+**Bug Fixes:**
+
+- Fix primitive type detection for pandas 2.x string dtype. Boolean, integer, and date strings are now correctly detected when pandas uses the newer `str` dtype instead of `object`.
+
+---
 
 ### v0.1.0 (Current)
 
