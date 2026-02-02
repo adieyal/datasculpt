@@ -7,11 +7,14 @@ including type detection, null rates, cardinality, and structural analysis.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from datasculpt.core.types import (
     ArrayProfile,
@@ -132,12 +135,12 @@ def detect_primitive_type(series: Series) -> tuple[PrimitiveType, list[str]]:
 
     if pd.api.types.is_datetime64_any_dtype(dtype):
         # Check if any values have time components
-        if hasattr(non_null.dt, "time"):
-            has_time = non_null.dt.time.apply(
-                lambda t: t.hour != 0 or t.minute != 0 or t.second != 0
-            ).any()
-            if has_time:
-                return PrimitiveType.DATETIME, notes
+        try:
+            has_time = (non_null.dt.time != pd.Timestamp("00:00:00").time()).any()
+        except AttributeError:
+            has_time = False
+        if has_time:
+            return PrimitiveType.DATETIME, notes
         return PrimitiveType.DATE, notes
 
     # For object or string dtype, inspect actual values to detect
@@ -184,8 +187,8 @@ def _detect_type_from_values(series: Series) -> tuple[PrimitiveType, list[str]]:
             if numeric.apply(lambda x: float(x).is_integer()).all():
                 return PrimitiveType.INTEGER, notes
             return PrimitiveType.NUMBER, notes
-    except (ValueError, TypeError):
-        pass
+    except (ValueError, TypeError) as e:
+        logger.debug(f"Numeric type detection failed: {e}")
 
     # Check for dates/datetimes
     date_result = attempt_date_parse(sample)
@@ -303,8 +306,8 @@ def compute_value_profile(series: Series, null_rate: float) -> ValueProfile:
         bounded_0100 = (valid_numeric >= 0) & (valid_numeric <= 100)
         profile.bounded_0_100_ratio = float(bounded_0100.sum() / len(valid_numeric))
 
-    except (ValueError, TypeError):
-        pass
+    except (ValueError, TypeError) as e:
+        logger.debug(f"Value profile computation failed: {e}")
 
     return profile
 
@@ -366,7 +369,8 @@ def attempt_date_parse(
             # Early exit if we found a perfect match
             if success_rate >= 0.99:
                 break
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Date parsing with format '{fmt}' failed: {e}")
             continue
 
     # Only fall back to auto-detection if specific formats didn't work well
@@ -388,14 +392,15 @@ def attempt_date_parse(
 
                 # Check for time components
                 valid_times = parsed.dropna()
-                if len(valid_times) > 0 and hasattr(valid_times.dt, "time"):
-                    has_time = bool(
-                        valid_times.dt.time.apply(
-                            lambda t: t.hour != 0 or t.minute != 0 or t.second != 0
-                        ).any()
-                    )
-        except (ValueError, TypeError):
-            pass
+                if len(valid_times) > 0:
+                    try:
+                        has_time = bool(
+                            (valid_times.dt.time != pd.Timestamp("00:00:00").time()).any()
+                        )
+                    except AttributeError as e:
+                        logger.debug(f"Time component extraction failed: {e}")
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Mixed format date parsing failed: {e}")
 
     return {
         "success_rate": best_success_rate,
@@ -440,7 +445,8 @@ def detect_json_array(series: Series) -> dict[str, float | bool]:
             parsed = json.loads(value_str)
             if isinstance(parsed, list):
                 success_count += 1
-        except (json.JSONDecodeError, ValueError):
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(f"JSON array parsing failed for value: {e}")
             continue
 
     success_rate = float(success_count / len(sample))
@@ -480,7 +486,8 @@ def compute_array_profile(series: Series) -> ArrayProfile | None:
                     parsed = json.loads(value_str)
                     if isinstance(parsed, list):
                         lengths.append(len(parsed))
-                except (json.JSONDecodeError, ValueError):
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.debug(f"Array profile JSON parsing failed: {e}")
                     continue
 
     if not lengths:
@@ -548,16 +555,16 @@ def detect_structural_type(series: Series) -> StructuralType:
                     if isinstance(parsed, list):
                         array_count += 1
                         continue
-                except (json.JSONDecodeError, ValueError):
-                    pass
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.debug(f"Structural type array detection failed: {e}")
             elif value_str.startswith("{"):
                 try:
                     parsed = json.loads(value_str)
                     if isinstance(parsed, dict):
                         object_count += 1
                         continue
-                except (json.JSONDecodeError, ValueError):
-                    pass
+                except (json.JSONDecodeError, ValueError) as e:
+                    logger.debug(f"Structural type object detection failed: {e}")
 
     total = len(sample)
     array_ratio = array_count / total
