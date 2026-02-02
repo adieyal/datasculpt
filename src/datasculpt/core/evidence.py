@@ -139,8 +139,9 @@ def detect_primitive_type(series: Series) -> tuple[PrimitiveType, list[str]]:
                 return PrimitiveType.DATETIME, notes
         return PrimitiveType.DATE, notes
 
-    # For object dtype, inspect actual values
-    if dtype == object:  # noqa: E721 - numpy dtype requires == not is
+    # For object or string dtype, inspect actual values to detect
+    # boolean strings, numeric strings, date strings, etc.
+    if dtype == object or pd.api.types.is_string_dtype(dtype):  # noqa: E721
         return _detect_type_from_values(non_null)
 
     return PrimitiveType.STRING, notes
