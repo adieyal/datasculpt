@@ -1,5 +1,59 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- **Microdata shape detection:** New `microdata` shape hypothesis for survey/observation datasets (DHS, LSMS, MICS style)
+  - Detects coded question columns (s1aq1, v101, hv001)
+  - Identifies hierarchical ID structure (hhid + indiv)
+  - Recognizes geography hierarchies (zone, state, lga)
+  - Finds survey weight columns
+
+- **New role values for survey data:**
+  - `respondent_id`: Primary unit identifier (hhid, person_id)
+  - `subunit_id`: Secondary ID within unit (indiv, member_num)
+  - `cluster_id`: Sampling cluster/EA identifier
+  - `survey_weight`: Sampling weights
+  - `question_response`: Coded survey question answers
+  - `geography_level`: Administrative hierarchy levels
+
+- **Evidence contract expansion:**
+  - `ColumnEvidence` now includes `n_rows`, `n_non_null`, `top_values`, `value_length_stats`
+  - New `ColumnSample` dataclass for deterministic value sampling
+  - `InferenceConfig` supports `return_samples`, `sample_size`, `sample_seed` options
+  - `InferenceResult` includes optional `column_samples` dict
+
+- **New microdata module:** `datasculpt.core.microdata` with survey-specific detection functions
+  - `MicrodataLevel` enum (household, individual, episode, item)
+  - `MicrodataProfile` and `QuestionColumnProfile` dataclasses
+
+### Fixed
+
+- Primitive type detection for pandas 2.x string dtype. Boolean, integer, and date strings are now correctly detected when pandas uses the newer `str` dtype instead of `object`.
+
+## [0.1.0] - 2024-01-15
+
+Initial public release.
+
+### Added
+
+- Core inference pipeline: evidence extraction → shape detection → role assignment → grain inference
+- Four supported shapes: `wide_observations`, `long_indicators`, `wide_time_columns`, `series_column`
+- Deterministic inference with no external model calls
+- Decision records capturing all evidence and reasoning
+- Interactive mode for human-in-the-loop disambiguation
+- InvariantProposal output for catalog integration
+- CLI for command-line usage
+- File format support: CSV, Excel, Parquet
+
+---
+
 ## Stability Guarantees
 
 Datasculpt follows semantic versioning. This table shows the stability of different components:
@@ -27,90 +81,22 @@ Datasculpt follows semantic versioning. This table shows the stability of differ
 - We aim for backwards compatibility but don't guarantee it
 - Changes will be documented in this changelog
 
-## Versioning Policy
-
-Datasculpt uses [Semantic Versioning](https://semver.org/):
-
-- **MAJOR** (1.0.0): Breaking changes to stable APIs
-- **MINOR** (0.1.0): New features, non-breaking changes
-- **PATCH** (0.0.1): Bug fixes, documentation updates
-
-During the 0.x phase, the API is still being refined. We aim for stability but reserve the right to make breaking changes in minor versions when necessary for the library's long-term health.
-
 ---
 
-## Releases
-
-### Unreleased
-
-**Features:**
-
-- **Microdata shape detection:** New `microdata` shape hypothesis for survey/observation datasets (DHS, LSMS, MICS style)
-  - Detects coded question columns (s1aq1, v101, hv001)
-  - Identifies hierarchical ID structure (hhid + indiv)
-  - Recognizes geography hierarchies (zone, state, lga)
-  - Finds survey weight columns
-
-- **New role values for survey data:**
-  - `respondent_id`: Primary unit identifier (hhid, person_id)
-  - `subunit_id`: Secondary ID within unit (indiv, member_num)
-  - `cluster_id`: Sampling cluster/EA identifier
-  - `survey_weight`: Sampling weights
-  - `question_response`: Coded survey question answers
-  - `geography_level`: Administrative hierarchy levels
-
-- **Evidence contract expansion:**
-  - `ColumnEvidence` now includes `n_rows`, `n_non_null`, `top_values`, `value_length_stats`
-  - New `ColumnSample` dataclass for deterministic value sampling
-  - `InferenceConfig` supports `return_samples`, `sample_size`, `sample_seed` options
-  - `InferenceResult` includes optional `column_samples` dict
-
-- **New microdata module:** `datasculpt.core.microdata` with survey-specific detection functions
-  - `MicrodataLevel` enum (household, individual, episode, item)
-  - `MicrodataProfile` and `QuestionColumnProfile` dataclasses
-
-**Bug Fixes:**
-
-- Fix primitive type detection for pandas 2.x string dtype. Boolean, integer, and date strings are now correctly detected when pandas uses the newer `str` dtype instead of `object`.
-
----
-
-### v0.1.0 (Current)
-
-*Initial public release*
-
-**Features:**
-
-- Core inference pipeline: evidence extraction → shape detection → role assignment → grain inference
-- Four supported shapes: `wide_observations`, `long_indicators`, `wide_time_columns`, `series_column`
-- Deterministic inference with no external model calls
-- Decision records capturing all evidence and reasoning
-- Interactive mode for human-in-the-loop disambiguation
-- InvariantProposal output for catalog integration
-- CLI for command-line usage
-- File format support: CSV, Excel, Parquet
-
-**Known Limitations:**
-
-- No support for nested/hierarchical data
-- No streaming support for large files
-- Limited to single-table inference
-
----
-
-## Planned
+## Roadmap
 
 ### v0.2.0
 
-*Planned improvements based on user feedback*
-
-- **Enhanced confidence scoring:** More granular confidence metrics
-- **Additional file formats:** JSON lines, SQLite tables
-- **Batch processing:** Process multiple files with consistent settings
-- **Performance improvements:** Lazy loading for large files
+- Enhanced confidence scoring with more granular metrics
+- Additional file formats: JSON lines, SQLite tables
+- Batch processing for multiple files
+- Performance improvements with lazy loading
 
 ### Future
 
 - Multi-table relationship inference
 - Custom role definitions
 - Plugin system for evidence extractors
+
+[Unreleased]: https://github.com/adieyal/datasculpt/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/adieyal/datasculpt/releases/tag/v0.1.0
