@@ -260,7 +260,7 @@ class TestCompareHypotheses:
         ]
         ranked = compare_hypotheses(columns)
 
-        assert len(ranked) == 5  # All 5 hypotheses
+        assert len(ranked) == 6  # All 6 hypotheses (including MICRODATA)
         # Verify sorted order
         for i in range(len(ranked) - 1):
             assert ranked[i].score >= ranked[i + 1].score
@@ -277,6 +277,7 @@ class TestCompareHypotheses:
             ShapeHypothesis.WIDE_OBSERVATIONS,
             ShapeHypothesis.WIDE_TIME_COLUMNS,
             ShapeHypothesis.SERIES_COLUMN,
+            ShapeHypothesis.MICRODATA,
         }
         assert hypotheses == expected
 
@@ -348,6 +349,27 @@ class TestDetectShape:
 
         assert result.selected == ShapeHypothesis.SERIES_COLUMN
 
+    def test_detects_microdata(self) -> None:
+        """Survey-like data with many question columns detected as microdata."""
+        columns = [
+            make_evidence("hhid", role_scores={Role.RESPONDENT_ID: 0.8, Role.KEY: 0.5}),
+            make_evidence("indiv", role_scores={Role.SUBUNIT_ID: 0.7}),
+            make_evidence("zone", role_scores={Role.GEOGRAPHY_LEVEL: 0.7}),
+            make_evidence("state", role_scores={Role.GEOGRAPHY_LEVEL: 0.7}),
+        ]
+        # Add 45+ question columns to trigger microdata detection
+        for i in range(45):
+            columns.append(
+                make_evidence(
+                    f"s1aq{i+1}",
+                    primitive_type=PrimitiveType.STRING,
+                    role_scores={Role.QUESTION_RESPONSE: 0.7},
+                )
+            )
+        result = detect_shape(columns)
+
+        assert result.selected == ShapeHypothesis.MICRODATA
+
     def test_ambiguity_when_close_scores(self) -> None:
         """Close top scores or low confidence marks result as ambiguous."""
         # Create a scenario where we can check ambiguity behavior
@@ -380,7 +402,7 @@ class TestDetectShape:
         ]
         result = detect_shape(columns)
 
-        assert len(result.ranked_hypotheses) == 5
+        assert len(result.ranked_hypotheses) == 6  # All 6 hypotheses including MICRODATA
         # First should be selected
         assert result.ranked_hypotheses[0].hypothesis == result.selected
 

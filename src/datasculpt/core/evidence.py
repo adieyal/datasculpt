@@ -16,6 +16,7 @@ import pandas as pd
 from datasculpt.core.types import (
     ArrayProfile,
     ColumnEvidence,
+    ColumnSample,
     ParseResults,
     PrimitiveType,
     StructuralType,
@@ -589,6 +590,27 @@ def extract_column_evidence(series: Series, column_name: str) -> ColumnEvidence:
     distinct_ratio = compute_distinct_ratio(series)
     unique_count = compute_unique_count(series)
 
+    # Compute row counts
+    n_rows = len(series)
+    non_null = series.dropna()
+    n_non_null = len(non_null)
+
+    # Compute top values (limit 10, stringified)
+    top_values: list[tuple[str, int]] = []
+    if n_non_null > 0:
+        value_counts = non_null.value_counts().head(10)
+        top_values = [(str(val), int(count)) for val, count in value_counts.items()]
+
+    # Compute value length stats
+    value_length_stats: dict[str, float] | None = None
+    if n_non_null > 0:
+        lengths = non_null.astype(str).str.len()
+        value_length_stats = {
+            "min": float(lengths.min()),
+            "max": float(lengths.max()),
+            "mean": float(lengths.mean()),
+        }
+
     # Compute value profile
     value_profile = compute_value_profile(series, null_rate)
 
@@ -659,12 +681,56 @@ def extract_column_evidence(series: Series, column_name: str) -> ColumnEvidence:
         null_rate=null_rate,
         distinct_ratio=distinct_ratio,
         unique_count=unique_count,
+        n_rows=n_rows,
+        n_non_null=n_non_null,
+        top_values=top_values,
+        value_length_stats=value_length_stats,
         value_profile=value_profile,
         array_profile=array_profile,
         header_date_like=header_date_like,
         parse_results=parse_results,
         parse_results_dict=parse_results_dict,
         notes=notes,
+    )
+
+
+def extract_column_sample(
+    series: Series,
+    sample_size: int = 200,
+    seed: int | None = 42,
+) -> ColumnSample:
+    """Extract deterministic sample from column.
+
+    Args:
+        series: A pandas Series to sample from.
+        sample_size: Maximum number of values to sample.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        A ColumnSample containing stringified values.
+    """
+    non_null = series.dropna()
+
+    if len(non_null) == 0:
+        return ColumnSample(
+            values=[],
+            sample_size=0,
+            sampling_method="full",
+            seed=seed,
+        )
+
+    if len(non_null) <= sample_size:
+        values = non_null.astype(str).tolist()
+        method = "full"
+    else:
+        values = non_null.sample(n=sample_size, random_state=seed).astype(str).tolist()
+        method = "random"
+
+    return ColumnSample(
+        values=values,
+        sample_size=len(values),
+        sampling_method=method,
+        seed=seed,
     )
 
 

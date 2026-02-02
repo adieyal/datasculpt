@@ -9,10 +9,20 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+from datasculpt.core.roles import (
+    CLUSTER_ID_PATTERNS,
+    GEOGRAPHY_LEVEL_PATTERNS,
+    RESPONDENT_ID_PATTERNS,
+    SUBUNIT_ID_PATTERNS,
+    SURVEY_QUESTION_PATTERNS,
+    SURVEY_WEIGHT_PATTERNS,
+    _matches_any_pattern,
+)
 from datasculpt.core.types import (
     ColumnEvidence,
     HypothesisScore,
     InferenceConfig,
+    PrimitiveType,
     Role,
     ShapeHypothesis,
     StructuralType,
@@ -401,6 +411,148 @@ def score_series_column(
     )
 
 
+def score_microdata(
+    columns: Sequence[ColumnEvidence],
+    config: InferenceConfig,
+) -> HypothesisScore:
+    """Score for survey/observation microdata pattern.
+
+    Microdata is characterized by:
+    - Many columns (30-100+)
+    - Coded column names following survey patterns (s1aq1, v101, hv001)
+    - Hierarchical ID structure (hhid + indiv)
+    - Geography hierarchy columns (zone, state, lga)
+    - Many low-cardinality categorical responses
+    - Absence of indicator/value unpivot pattern
+
+    Uses both role-based detection (from pre-computed role_scores) AND direct
+    pattern matching on column names for robust detection.
+
+    Args:
+        columns: Column evidence from profiling.
+        config: Inference configuration.
+
+    Returns:
+        HypothesisScore with score and reasons.
+    """
+    score = 0.0
+    reasons: list[str] = []
+    n_cols = len(columns)
+
+    # ============ STRONG POSITIVE SIGNALS ============
+
+    # Signal 1: High column count (30-100+)
+    if n_cols >= 50:
+        score += 0.25
+        reasons.append(f"High column count ({n_cols}) suggests wide microdata")
+    elif n_cols >= 30:
+        score += 0.15
+        reasons.append(f"Moderate column count ({n_cols}) consistent with microdata")
+
+    # Signal 2: Coded question columns (s1aq1, v101, hv001)
+    # Use both role scores AND direct pattern matching for robustness
+    question_cols_by_role = _columns_with_role(columns, Role.QUESTION_RESPONSE, threshold=0.3)
+    question_cols_by_pattern = _columns_matching_patterns(columns, SURVEY_QUESTION_PATTERNS)
+    # Combine both detection methods (union)
+    question_col_names = set(c.name for c in question_cols_by_role) | set(c.name for c in question_cols_by_pattern)
+    question_ratio = len(question_col_names) / n_cols if n_cols > 0 else 0
+
+    if question_ratio >= 0.5:
+        score += 0.30
+        reasons.append(f"High ratio ({question_ratio:.0%}) of coded question columns")
+    elif question_ratio >= 0.25:
+        score += 0.15
+        reasons.append(f"Moderate ratio ({question_ratio:.0%}) of coded question columns")
+
+    # Signal 3: Hierarchical ID structure
+    # Use both role scores AND direct pattern matching
+    respondent_ids_by_role = _columns_with_role(columns, Role.RESPONDENT_ID, threshold=0.3)
+    respondent_ids_by_pattern = _columns_matching_patterns(columns, RESPONDENT_ID_PATTERNS)
+    respondent_ids = list({c.name: c for c in list(respondent_ids_by_role) + list(respondent_ids_by_pattern)}.values())
+
+    subunit_ids_by_role = _columns_with_role(columns, Role.SUBUNIT_ID, threshold=0.3)
+    subunit_ids_by_pattern = _columns_matching_patterns(columns, SUBUNIT_ID_PATTERNS)
+    subunit_ids = list({c.name: c for c in list(subunit_ids_by_role) + list(subunit_ids_by_pattern)}.values())
+
+    cluster_ids_by_role = _columns_with_role(columns, Role.CLUSTER_ID, threshold=0.3)
+    cluster_ids_by_pattern = _columns_matching_patterns(columns, CLUSTER_ID_PATTERNS)
+    cluster_ids = list({c.name: c for c in list(cluster_ids_by_role) + list(cluster_ids_by_pattern)}.values())
+
+    if respondent_ids:
+        score += 0.15
+        reasons.append(f"Found respondent ID column(s): {_names(respondent_ids)}")
+    if subunit_ids:
+        score += 0.10
+        reasons.append(f"Found subunit ID column(s): {_names(subunit_ids)}")
+    if cluster_ids:
+        score += 0.05
+        reasons.append(f"Found cluster/EA column(s): {_names(cluster_ids)}")
+
+    # Signal 4: Geography hierarchy (zone, state, lga)
+    geo_cols_by_role = _columns_with_role(columns, Role.GEOGRAPHY_LEVEL, threshold=0.3)
+    geo_cols_by_pattern = _columns_matching_patterns(columns, GEOGRAPHY_LEVEL_PATTERNS)
+    geo_cols = list({c.name: c for c in list(geo_cols_by_role) + list(geo_cols_by_pattern)}.values())
+
+    if len(geo_cols) >= 2:
+        score += 0.10
+        reasons.append(f"Found geography hierarchy ({len(geo_cols)} levels): {_names(geo_cols)}")
+
+    # Signal 5: Weight column present
+    weight_cols_by_role = _columns_with_role(columns, Role.SURVEY_WEIGHT, threshold=0.3)
+    weight_cols_by_pattern = _columns_matching_patterns(columns, SURVEY_WEIGHT_PATTERNS)
+    weight_cols = list({c.name: c for c in list(weight_cols_by_role) + list(weight_cols_by_pattern)}.values())
+
+    if weight_cols:
+        score += 0.05
+        reasons.append(f"Found survey weight column: {_names(weight_cols)}")
+
+    # Signal 6: Many low-cardinality categoricals
+    low_card_cols = [
+        c for c in columns
+        if c.primitive_type == PrimitiveType.STRING
+        and c.distinct_ratio < 0.05
+    ]
+    low_card_ratio = len(low_card_cols) / n_cols if n_cols > 0 else 0
+
+    if low_card_ratio >= 0.3:
+        score += 0.10
+        reasons.append(f"Many low-cardinality categorical columns ({low_card_ratio:.0%})")
+
+    # ============ NEGATIVE SIGNALS ============
+
+    # Penalty: indicator_name/value pattern present (this is long_indicators, not microdata)
+    indicator_cols = _columns_with_role(columns, Role.INDICATOR_NAME)
+    value_cols = _columns_with_role(columns, Role.VALUE)
+
+    if indicator_cols and value_cols:
+        score -= 0.35
+        reasons.append("Has indicator/value pattern (suggests long_indicators, not microdata)")
+
+    # Penalty: Low column count
+    if n_cols < 15:
+        score -= 0.25
+        reasons.append(f"Low column count ({n_cols}) atypical for microdata")
+
+    # Penalty: No question-coded columns (use the combined detection)
+    if len(question_col_names) == 0:
+        score -= 0.20
+        reasons.append("No coded question columns detected")
+
+    # Penalty: No ID columns
+    if not respondent_ids and not subunit_ids:
+        score -= 0.15
+        reasons.append("No respondent/unit ID columns detected")
+
+    # Clamp score to [0, 1]
+    score = max(0.0, min(1.0, score))
+
+    return HypothesisScore(
+        hypothesis=ShapeHypothesis.MICRODATA,
+        score=score,
+        reasons=reasons,
+    )
+
+
 def compare_hypotheses(
     columns: Sequence[ColumnEvidence],
     config: InferenceConfig | None = None,
@@ -423,6 +575,7 @@ def compare_hypotheses(
         score_wide_observations(columns, config),
         score_wide_time_columns(columns, config),
         score_series_column(columns, config),
+        score_microdata(columns, config),
     ]
 
     # Sort by score descending
@@ -560,6 +713,28 @@ def _columns_with_role(
     return [
         col for col in columns
         if col.role_scores.get(role, 0.0) >= threshold
+    ]
+
+
+def _columns_matching_patterns(
+    columns: Sequence[ColumnEvidence],
+    patterns: tuple,
+) -> list[ColumnEvidence]:
+    """Filter columns whose names match any of the given regex patterns.
+
+    This provides direct pattern matching as a fallback when role scores
+    haven't been pre-computed.
+
+    Args:
+        columns: Column evidence sequence.
+        patterns: Tuple of compiled regex patterns.
+
+    Returns:
+        List of columns whose names match at least one pattern.
+    """
+    return [
+        col for col in columns
+        if _matches_any_pattern(col.name, patterns)
     ]
 
 

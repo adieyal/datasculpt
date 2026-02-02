@@ -43,6 +43,7 @@ SHAPE_TO_KIND: dict[ShapeHypothesis, DatasetKind] = {
     ShapeHypothesis.WIDE_TIME_COLUMNS: DatasetKind.TIMESERIES_WIDE,
     ShapeHypothesis.SERIES_COLUMN: DatasetKind.TIMESERIES_SERIES,
     ShapeHypothesis.WIDE_OBSERVATIONS: DatasetKind.OBSERVATIONS,  # Default fallback
+    ShapeHypothesis.MICRODATA: DatasetKind.MICRODATA,
 }
 
 # Thresholds for warnings and confirmations

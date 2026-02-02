@@ -95,13 +95,81 @@ VALUE_NAME_PATTERNS = (
 # Patterns for survey question codes - these are dimensions, not indicator names
 # Examples: s1q2, q1, question_1, var_01, v101, hv001
 SURVEY_QUESTION_PATTERNS = (
-    re.compile(r"^s\d+q\d+", re.IGNORECASE),  # s1q2, s01q01
+    re.compile(r"^s\d+[a-z]?q\d+", re.IGNORECASE),  # s1q2, s01q01, s1aq1, s2bq3 (LSMS style)
     re.compile(r"^q\d+", re.IGNORECASE),  # q1, q01, q1a
-    re.compile(r"^v\d+", re.IGNORECASE),  # v101, v001
+    re.compile(r"^v\d{2,4}$", re.IGNORECASE),  # v101, v0401 (DHS style)
     re.compile(r"^hv\d+", re.IGNORECASE),  # hv001 (DHS household)
     re.compile(r"^mv\d+", re.IGNORECASE),  # mv001 (DHS men's)
     re.compile(r"^question", re.IGNORECASE),  # question_1, question1
     re.compile(r"^var_?\d+", re.IGNORECASE),  # var_01, var01
+    re.compile(r"^[a-z]{1,2}\d+[a-z]?$", re.IGNORECASE),  # sh01, b2, etc.
+    re.compile(r"^[a-z]+_\d+$", re.IGNORECASE),  # item_3, var_01
+)
+
+# ============ MICRODATA-SPECIFIC PATTERNS ============
+
+# Respondent/household ID patterns
+RESPONDENT_ID_PATTERNS = (
+    re.compile(r"^hh(ld)?_?id$", re.IGNORECASE),  # hhid, hh_id, hhldid
+    re.compile(r"^person_?id$", re.IGNORECASE),  # person_id, personid
+    re.compile(r"^case_?id$", re.IGNORECASE),  # case_id, caseid
+    re.compile(r"^respondent_?id$", re.IGNORECASE),  # respondent_id
+    re.compile(r"^interview_?id$", re.IGNORECASE),  # interview_id
+    re.compile(r"^hid$", re.IGNORECASE),  # hid (short form)
+    re.compile(r"^pid$", re.IGNORECASE),  # pid (person id short)
+)
+
+# Subunit ID patterns (individual within household, child within mother, etc.)
+SUBUNIT_ID_PATTERNS = (
+    re.compile(r"^indiv(idual)?$", re.IGNORECASE),  # indiv, individual
+    re.compile(r"^member_?(num|no|id)?$", re.IGNORECASE),  # member, member_num
+    re.compile(r"^child_?(num|no|id)?$", re.IGNORECASE),  # child_num
+    re.compile(r"^person_?(num|no)?$", re.IGNORECASE),  # person_num
+    re.compile(r"^line_?(num|no)?$", re.IGNORECASE),  # line_num (roster line)
+    re.compile(r"^roster_?(num|no|id)?$", re.IGNORECASE),  # roster_num
+    re.compile(r"^hh_?member", re.IGNORECASE),  # hh_member, hhmember
+)
+
+# Cluster/sampling unit patterns
+CLUSTER_ID_PATTERNS = (
+    re.compile(r"^ea$", re.IGNORECASE),  # ea (Enumeration Area)
+    re.compile(r"^cluster", re.IGNORECASE),  # cluster, cluster_id
+    re.compile(r"^psu$", re.IGNORECASE),  # psu (Primary Sampling Unit)
+    re.compile(r"^stratum", re.IGNORECASE),  # stratum, strata
+    re.compile(r"^ssu$", re.IGNORECASE),  # ssu (Secondary Sampling Unit)
+    re.compile(r"^segment", re.IGNORECASE),  # segment
+)
+
+# Survey weight patterns
+SURVEY_WEIGHT_PATTERNS = (
+    re.compile(r"^weight", re.IGNORECASE),  # weight
+    re.compile(r"^wgt$", re.IGNORECASE),  # wgt (common abbreviation)
+    re.compile(r"^wght$", re.IGNORECASE),  # wght
+    re.compile(r"_weight$", re.IGNORECASE),  # hh_weight, person_weight
+    re.compile(r"_wgt$", re.IGNORECASE),  # hh_wgt
+    re.compile(r"^wt\d*$", re.IGNORECASE),  # wt, wt1, wt2
+    re.compile(r"^sampling_?w", re.IGNORECASE),  # sampling_weight
+    re.compile(r"^expansion_?f", re.IGNORECASE),  # expansion_factor
+    re.compile(r"^pweight", re.IGNORECASE),  # pweight (Stata convention)
+)
+
+# Geography level patterns (administrative hierarchy)
+GEOGRAPHY_LEVEL_PATTERNS = (
+    re.compile(r"^zone$", re.IGNORECASE),
+    re.compile(r"^region$", re.IGNORECASE),
+    re.compile(r"^state$", re.IGNORECASE),
+    re.compile(r"^province$", re.IGNORECASE),
+    re.compile(r"^lga$", re.IGNORECASE),  # Local Government Area
+    re.compile(r"^district$", re.IGNORECASE),
+    re.compile(r"^ward$", re.IGNORECASE),
+    re.compile(r"^sector$", re.IGNORECASE),
+    re.compile(r"^admin\d$", re.IGNORECASE),  # admin1, admin2, admin3
+    re.compile(r"^adm\d$", re.IGNORECASE),  # adm1, adm2
+    re.compile(r"^county$", re.IGNORECASE),
+    re.compile(r"^municipality$", re.IGNORECASE),
+    re.compile(r"^sub_?county$", re.IGNORECASE),
+    re.compile(r"^parish$", re.IGNORECASE),
+    re.compile(r"^village$", re.IGNORECASE),
 )
 
 
@@ -656,6 +724,305 @@ def score_series_role(evidence: ColumnEvidence) -> float:
     return _clamp(score)
 
 
+# ============ MICRODATA ROLE SCORING FUNCTIONS ============
+
+
+def score_respondent_id_role(
+    evidence: ColumnEvidence,
+    config: InferenceConfig | None = None,
+    detected_shape: ShapeHypothesis | None = None,
+) -> float:
+    """Score likelihood that column is a primary respondent/unit ID.
+
+    High scores for:
+    - Name matches respondent ID patterns (hhid, person_id)
+    - High cardinality (one per household/person)
+    - Low null rate
+    - MICRODATA shape detected
+
+    Args:
+        evidence: Column evidence from profiling.
+        config: Optional inference configuration.
+        detected_shape: Detected dataset shape.
+
+    Returns:
+        Score between 0.0 and 1.0.
+    """
+    score = 0.0
+
+    # Name pattern matching - strongest signal
+    if _matches_any_pattern(evidence.name, RESPONDENT_ID_PATTERNS):
+        score += 0.5
+
+    # High cardinality expected (one per household/person)
+    if evidence.distinct_ratio >= 0.3:
+        score += 0.2
+    elif evidence.distinct_ratio >= 0.1:
+        score += 0.1
+
+    # Low null rate expected
+    if evidence.null_rate <= 0.01:
+        score += 0.1
+    elif evidence.null_rate <= 0.05:
+        score += 0.05
+
+    # Integer or string type common for IDs
+    if evidence.primitive_type in (PrimitiveType.INTEGER, PrimitiveType.STRING):
+        score += 0.1
+
+    # Boost for microdata shape
+    if detected_shape == ShapeHypothesis.MICRODATA:
+        score += 0.1
+
+    return _clamp(score)
+
+
+def score_subunit_id_role(
+    evidence: ColumnEvidence,
+    config: InferenceConfig | None = None,
+    detected_shape: ShapeHypothesis | None = None,
+) -> float:
+    """Score likelihood that column is a secondary/subunit ID.
+
+    Subunit IDs identify individuals within households, children within
+    mothers, or other nested structures.
+
+    High scores for:
+    - Name matches subunit patterns (indiv, member_num)
+    - Low-moderate cardinality (1-N within unit)
+    - Integer type (common for line numbers)
+    - MICRODATA shape detected
+
+    Args:
+        evidence: Column evidence from profiling.
+        config: Optional inference configuration.
+        detected_shape: Detected dataset shape.
+
+    Returns:
+        Score between 0.0 and 1.0.
+    """
+    score = 0.0
+
+    # Name pattern matching
+    if _matches_any_pattern(evidence.name, SUBUNIT_ID_PATTERNS):
+        score += 0.5
+
+    # Low-moderate cardinality (1-N within unit, typically small N)
+    if 0.01 < evidence.distinct_ratio < 0.3:
+        score += 0.2
+    elif evidence.distinct_ratio <= 0.01:
+        # Very low cardinality suggests small roster sizes
+        score += 0.15
+
+    # Integer type common for line numbers
+    if evidence.primitive_type == PrimitiveType.INTEGER:
+        score += 0.15
+    elif evidence.primitive_type == PrimitiveType.STRING:
+        score += 0.05
+
+    # Boost for microdata shape
+    if detected_shape == ShapeHypothesis.MICRODATA:
+        score += 0.1
+
+    return _clamp(score)
+
+
+def score_cluster_id_role(
+    evidence: ColumnEvidence,
+    config: InferenceConfig | None = None,
+    detected_shape: ShapeHypothesis | None = None,
+) -> float:
+    """Score likelihood that column is a sampling cluster/EA ID.
+
+    High scores for:
+    - Name matches cluster patterns (ea, cluster, psu)
+    - Moderate cardinality (fewer clusters than respondents)
+    - Integer or string type
+
+    Args:
+        evidence: Column evidence from profiling.
+        config: Optional inference configuration.
+        detected_shape: Detected dataset shape.
+
+    Returns:
+        Score between 0.0 and 1.0.
+    """
+    score = 0.0
+
+    # Name pattern matching - strongest signal
+    if _matches_any_pattern(evidence.name, CLUSTER_ID_PATTERNS):
+        score += 0.6
+
+    # Moderate cardinality (fewer clusters than respondents)
+    if 0.01 < evidence.distinct_ratio < 0.2:
+        score += 0.15
+    elif evidence.distinct_ratio < 0.01:
+        # Very low cardinality - could be stratum
+        score += 0.1
+
+    # Integer or string type
+    if evidence.primitive_type in (PrimitiveType.INTEGER, PrimitiveType.STRING):
+        score += 0.1
+
+    # Boost for microdata shape
+    if detected_shape == ShapeHypothesis.MICRODATA:
+        score += 0.1
+
+    return _clamp(score)
+
+
+def score_survey_weight_role(
+    evidence: ColumnEvidence,
+    config: InferenceConfig | None = None,
+    detected_shape: ShapeHypothesis | None = None,
+) -> float:
+    """Score likelihood that column is a survey weight.
+
+    High scores for:
+    - Name matches weight patterns (weight, wgt)
+    - Numeric type (required)
+    - Positive values
+    - Moderate cardinality (weights often repeated)
+
+    Args:
+        evidence: Column evidence from profiling.
+        config: Optional inference configuration.
+        detected_shape: Detected dataset shape.
+
+    Returns:
+        Score between 0.0 and 1.0.
+    """
+    score = 0.0
+
+    # Must be numeric
+    if evidence.primitive_type not in (PrimitiveType.NUMBER, PrimitiveType.INTEGER):
+        return 0.0
+
+    # Name pattern matching - strongest signal
+    if _matches_any_pattern(evidence.name, SURVEY_WEIGHT_PATTERNS):
+        score += 0.6
+
+    # Positive values expected (weights are positive)
+    if evidence.value_profile.non_negative_ratio >= 0.99:
+        score += 0.2
+    elif evidence.value_profile.non_negative_ratio >= 0.95:
+        score += 0.1
+
+    # Not too many unique values (weights are often repeated within strata)
+    if evidence.distinct_ratio < 0.5:
+        score += 0.1
+
+    # Boost for microdata shape
+    if detected_shape == ShapeHypothesis.MICRODATA:
+        score += 0.1
+
+    return _clamp(score)
+
+
+def score_question_response_role(
+    evidence: ColumnEvidence,
+    config: InferenceConfig | None = None,
+    detected_shape: ShapeHypothesis | None = None,
+) -> float:
+    """Score likelihood that column is a survey question response.
+
+    High scores for:
+    - Name matches question coding patterns (s1aq1, v101)
+    - Low-moderate cardinality (categorical responses)
+    - MICRODATA shape detected
+
+    Low scores for:
+    - Non-MICRODATA shapes
+    - High cardinality (open-ended responses)
+    - ID-like patterns
+
+    Args:
+        evidence: Column evidence from profiling.
+        config: Optional inference configuration.
+        detected_shape: Detected dataset shape.
+
+    Returns:
+        Score between 0.0 and 1.0.
+    """
+    score = 0.0
+
+    # Most relevant for microdata shape
+    if detected_shape is not None and detected_shape != ShapeHypothesis.MICRODATA:
+        # Still allow some score if name pattern matches strongly
+        if _matches_any_pattern(evidence.name, SURVEY_QUESTION_PATTERNS):
+            return 0.3
+        return 0.0
+
+    # Name pattern matching - strongest signal
+    if _matches_any_pattern(evidence.name, SURVEY_QUESTION_PATTERNS):
+        score += 0.6
+
+    # Categorical cardinality (typical survey responses have 2-20 options)
+    if evidence.distinct_ratio < 0.1:
+        if evidence.unique_count <= 20:
+            score += 0.2  # Clear categorical
+        elif evidence.unique_count <= 50:
+            score += 0.1  # Possible categorical with many options
+    elif evidence.distinct_ratio < 0.3:
+        score += 0.05  # Higher cardinality, less typical
+
+    # Penalty for ID-like patterns
+    if _matches_any_pattern(evidence.name, KEY_NAME_PATTERNS):
+        score -= 0.3
+
+    # Penalty for weight-like patterns
+    if _matches_any_pattern(evidence.name, SURVEY_WEIGHT_PATTERNS):
+        score -= 0.3
+
+    return _clamp(score)
+
+
+def score_geography_level_role(
+    evidence: ColumnEvidence,
+    config: InferenceConfig | None = None,
+    detected_shape: ShapeHypothesis | None = None,
+) -> float:
+    """Score likelihood that column is a geography level in a hierarchy.
+
+    High scores for:
+    - Name matches geography patterns (zone, state, lga, district)
+    - String type (geographic names)
+    - Low-moderate cardinality (administrative units)
+
+    Args:
+        evidence: Column evidence from profiling.
+        config: Optional inference configuration.
+        detected_shape: Detected dataset shape.
+
+    Returns:
+        Score between 0.0 and 1.0.
+    """
+    score = 0.0
+
+    # Name pattern matching - strongest signal
+    if _matches_any_pattern(evidence.name, GEOGRAPHY_LEVEL_PATTERNS):
+        score += 0.6
+
+    # String type common for geographic names
+    if evidence.primitive_type == PrimitiveType.STRING:
+        score += 0.2
+    elif evidence.primitive_type == PrimitiveType.INTEGER:
+        # Integer codes for geography levels are also common
+        score += 0.1
+
+    # Low-moderate cardinality (administrative units are enumerable)
+    if evidence.distinct_ratio <= 0.1:
+        score += 0.15
+    elif evidence.distinct_ratio <= 0.3:
+        score += 0.1
+
+    # Low null rate expected
+    if evidence.null_rate <= 0.05:
+        score += 0.05
+
+    return _clamp(score)
+
+
 @dataclass
 class RoleAssignment:
     """Result of role assignment for a column."""
@@ -695,6 +1062,13 @@ def compute_role_scores(
         Role.VALUE: score_value_role(evidence, has_indicator_column, detected_shape),
         Role.SERIES: score_series_role(evidence),
         Role.METADATA: 0.1,  # Default low score; metadata is fallback
+        # Microdata-specific roles
+        Role.RESPONDENT_ID: score_respondent_id_role(evidence, config, detected_shape),
+        Role.SUBUNIT_ID: score_subunit_id_role(evidence, config, detected_shape),
+        Role.SURVEY_WEIGHT: score_survey_weight_role(evidence, config, detected_shape),
+        Role.QUESTION_RESPONSE: score_question_response_role(evidence, config, detected_shape),
+        Role.GEOGRAPHY_LEVEL: score_geography_level_role(evidence, config, detected_shape),
+        Role.CLUSTER_ID: score_cluster_id_role(evidence, config, detected_shape),
     }
 
 
@@ -784,6 +1158,12 @@ def resolve_role(
         Role.INDICATOR_NAME,
         Role.VALUE,
         Role.SERIES,
+        Role.RESPONDENT_ID,
+        Role.SUBUNIT_ID,
+        Role.CLUSTER_ID,
+        Role.SURVEY_WEIGHT,
+        Role.QUESTION_RESPONSE,
+        Role.GEOGRAPHY_LEVEL,
         Role.MEASURE,
         Role.DIMENSION,
         Role.METADATA,

@@ -283,8 +283,8 @@ class TestPipelineDecisionRecord:
         result = infer(wide_observations_path)
         hypotheses = result.decision_record.hypotheses
 
-        # Should have scored all 5 shape hypotheses
-        assert len(hypotheses) == 5
+        # Should have scored all 6 shape hypotheses (including MICRODATA)
+        assert len(hypotheses) == 6
 
         # All hypotheses should have scores
         for h in hypotheses:

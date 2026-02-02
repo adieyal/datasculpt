@@ -15,12 +15,13 @@ from typing import Any
 
 import pandas as pd
 
-from datasculpt.core.evidence import extract_dataframe_evidence
+from datasculpt.core.evidence import extract_column_sample, extract_dataframe_evidence
 from datasculpt.core.grain import infer_grain
 from datasculpt.core.roles import assign_roles, update_evidence_with_roles
 from datasculpt.core.shapes import detect_shape
 from datasculpt.core.types import (
     ColumnEvidence,
+    ColumnSample,
     ColumnSpec,
     DatasetKind,
     DecisionRecord,
@@ -45,12 +46,14 @@ class InferenceResult:
         decision_record: Complete audit trail of the inference process.
         pending_questions: Questions requiring user input for ambiguity resolution.
         dataframe: The loaded DataFrame, available for further processing.
+        column_samples: Column samples for downstream detectors (if requested).
     """
 
     proposal: InvariantProposal
     decision_record: DecisionRecord
     pending_questions: list[Question]
     dataframe: pd.DataFrame | None = None
+    column_samples: dict[str, ColumnSample] | None = None
 
 
 # Shape to DatasetKind mapping
@@ -60,6 +63,7 @@ SHAPE_TO_KIND: dict[ShapeHypothesis, DatasetKind] = {
     ShapeHypothesis.WIDE_OBSERVATIONS: DatasetKind.OBSERVATIONS,
     ShapeHypothesis.WIDE_TIME_COLUMNS: DatasetKind.TIMESERIES_WIDE,
     ShapeHypothesis.SERIES_COLUMN: DatasetKind.TIMESERIES_SERIES,
+    ShapeHypothesis.MICRODATA: DatasetKind.MICRODATA,
 }
 
 
@@ -443,6 +447,17 @@ def infer(
     # Step 2: Extract evidence for each column
     column_evidence = extract_dataframe_evidence(df)
 
+    # Step 2b: Extract samples if requested
+    column_samples: dict[str, ColumnSample] | None = None
+    if config.return_samples:
+        column_samples = {}
+        for col_name in df.columns:
+            column_samples[str(col_name)] = extract_column_sample(
+                df[col_name],
+                sample_size=config.sample_size,
+                seed=config.sample_seed,
+            )
+
     # Step 3: Score roles for each column
     # First pass: detect if there's an indicator column
     evidences = list(column_evidence.values())
@@ -529,6 +544,7 @@ def infer(
         decision_record=decision_record,
         pending_questions=questions,
         dataframe=df,
+        column_samples=column_samples,
     )
 
 

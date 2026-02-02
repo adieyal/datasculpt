@@ -41,6 +41,13 @@ class Role(str, Enum):
     VALUE = "value"
     SERIES = "series"
     METADATA = "metadata"
+    # Microdata-specific roles
+    RESPONDENT_ID = "respondent_id"  # Primary unit ID (hhid, personid)
+    SUBUNIT_ID = "subunit_id"  # Secondary ID within unit (indiv, child_num)
+    SURVEY_WEIGHT = "survey_weight"  # Sampling weight
+    QUESTION_RESPONSE = "question_response"  # Survey question answer
+    GEOGRAPHY_LEVEL = "geography_level"  # Part of geography hierarchy
+    CLUSTER_ID = "cluster_id"  # Sampling cluster/EA
 
 
 class ShapeHypothesis(str, Enum):
@@ -51,6 +58,7 @@ class ShapeHypothesis(str, Enum):
     WIDE_OBSERVATIONS = "wide_observations"
     WIDE_TIME_COLUMNS = "wide_time_columns"
     SERIES_COLUMN = "series_column"
+    MICRODATA = "microdata"
 
 
 class DatasetKind(str, Enum):
@@ -60,6 +68,7 @@ class DatasetKind(str, Enum):
     INDICATORS_LONG = "indicators_long"
     TIMESERIES_WIDE = "timeseries_wide"
     TIMESERIES_SERIES = "timeseries_series"
+    MICRODATA = "microdata"
 
 
 class QuestionType(str, Enum):
@@ -143,6 +152,19 @@ class ColumnEvidence:
     null_rate: float = 0.0
     distinct_ratio: float = 0.0
     unique_count: int = 0
+
+    # Row counts
+    n_rows: int = 0
+    n_non_null: int = 0
+
+    # Top value frequencies (value, count) tuples, limited to 10
+    top_values: list[tuple[str, int]] = field(default_factory=list)
+
+    # String length statistics {min, max, mean}
+    value_length_stats: dict[str, float] | None = None
+
+    # Regex pattern hit counts (pattern -> count)
+    regex_hits: dict[str, int] = field(default_factory=dict)
 
     # Value distribution profile
     value_profile: ValueProfile = field(default_factory=ValueProfile)
@@ -287,6 +309,19 @@ class InvariantProposal:
 
 
 @dataclass
+class ColumnSample:
+    """Sample of column values for downstream detectors.
+
+    This is part of the stable evidence contract.
+    """
+
+    values: list[str]  # stringified
+    sample_size: int
+    sampling_method: str  # "full", "random", "head", "stratified"
+    seed: int | None
+
+
+@dataclass
 class InferenceConfig:
     """Configuration for inference behavior."""
 
@@ -308,3 +343,80 @@ class InferenceConfig:
     # Optional adapters
     use_frictionless: bool = False
     use_dataprofiler: bool = False
+
+    # Sampling configuration
+    return_samples: bool = False
+    sample_size: int = 200
+    sample_seed: int | None = 42  # fixed seed for determinism
+
+
+# ==================== Microdata Types ====================
+
+
+class MicrodataLevel(str, Enum):
+    """Observation level for microdata datasets.
+    
+    Describes what each row represents in survey/observation data:
+    - HOUSEHOLD: One row per household unit
+    - INDIVIDUAL: One row per person
+    - EPISODE: One row per event (migration, illness episode)
+    - ITEM: One row per item (expenditure, crop)
+    - UNKNOWN: Level could not be determined
+    """
+
+    HOUSEHOLD = "household"
+    INDIVIDUAL = "individual"
+    EPISODE = "episode"
+    ITEM = "item"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class MicrodataProfile:
+    """Profile specific to microdata/survey datasets.
+    
+    Captures the rich structure of survey data including ID hierarchies,
+    geography levels, question patterns, and survey metadata.
+    """
+
+    # Observation level
+    level: MicrodataLevel
+    level_confidence: float
+
+    # ID structure (hierarchical keys)
+    primary_id_columns: list[str]    # e.g., ['hhid']
+    secondary_id_columns: list[str]  # e.g., ['indiv', 'member_num']
+    cluster_columns: list[str]       # e.g., ['ea', 'cluster', 'psu']
+
+    # Geography hierarchy (ordered from broad to narrow)
+    geography_hierarchy: list[str]   # e.g., ['zone', 'state', 'lga']
+
+    # Question structure
+    question_prefix_pattern: str | None  # Detected pattern like 's1aq' or 'hv'
+    question_columns: list[str]          # All coded question columns
+
+    # Weights
+    weight_column: str | None
+
+    # Survey metadata (inferred from patterns)
+    survey_type_hint: str | None     # e.g., 'DHS', 'LSMS', 'MICS'
+    section_hint: str | None         # e.g., 'demographics', 'health', 'migration'
+
+
+@dataclass
+class QuestionColumnProfile:
+    """Detailed profile for a survey question column.
+    
+    Captures the structure of question column names and their characteristics.
+    Used for understanding survey organization and potential reshaping.
+    """
+
+    name: str
+    section_code: str | None     # 's1a' from 's1aq1'
+    question_number: str | None  # 'q1' from 's1aq1', '101' from 'v101'
+    subquestion: str | None      # '_os' suffix for 'other specify', 'a'/'b' variants
+
+    response_type: str           # 'categorical', 'numeric', 'text', 'binary'
+    distinct_values: int
+    has_value_labels: bool       # True if Stata labels or similar metadata exists
+    label_hint: str | None       # Variable label if available from source

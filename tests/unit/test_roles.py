@@ -460,6 +460,13 @@ class TestComputeRoleScores:
             Role.VALUE,
             Role.SERIES,
             Role.METADATA,
+            # Microdata-specific roles
+            Role.RESPONDENT_ID,
+            Role.SUBUNIT_ID,
+            Role.SURVEY_WEIGHT,
+            Role.QUESTION_RESPONSE,
+            Role.GEOGRAPHY_LEVEL,
+            Role.CLUSTER_ID,
         }
         assert set(scores.keys()) == expected_roles
 
