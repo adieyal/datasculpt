@@ -33,6 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `MicrodataLevel` enum (household, individual, episode, item)
   - `MicrodataProfile` and `QuestionColumnProfile` dataclasses
 
+### Changed
+
+- Add debug logging to silent exception handlers in adapters (reporting, frictionless) and core modules (intake, decision)
+- Replace `hasattr` with `try/except` for pandas datetime accessor checks
+- Move stdlib imports to module top level
+- Consolidate adapter inline imports
+- Improve type annotations in pipeline module
+- Remove unused `total_rows` parameter from `compute_value_distribution`
+
 ### Fixed
 
 - Primitive type detection for pandas 2.x string dtype. Boolean, integer, and date strings are now correctly detected when pandas uses the newer `str` dtype instead of `object`.
