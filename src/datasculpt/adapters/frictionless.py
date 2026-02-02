@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 from datasculpt.adapters.base import AdapterResult, BaseAdapter, safe_import
 from datasculpt.core.types import ColumnEvidence, PrimitiveType
@@ -68,11 +71,13 @@ def _profile_with_frictionless(df: pd.DataFrame, Resource: type) -> AdapterResul
         for field in schema.fields:
             try:
                 field_format = field.format
-            except AttributeError:
+            except AttributeError as e:
+                logger.debug("Could not access field format: %s", e)
                 field_format = None
             try:
                 field_constraints = field.constraints
-            except AttributeError:
+            except AttributeError as e:
+                logger.debug("Could not access field constraints: %s", e)
                 field_constraints = {}
             column_annotations[field.name] = {
                 "frictionless_type": field.type,
@@ -110,7 +115,8 @@ def infer_schema(df: pd.DataFrame) -> dict[str, Any] | None:
         resource = Resource(df)
         resource.infer()
         return resource.schema.to_dict()
-    except Exception:
+    except Exception as e:
+        logger.debug("Schema inference failed: %s", e)
         return None
 
 
@@ -204,7 +210,8 @@ def validate(df: pd.DataFrame) -> list[dict[str, Any]]:
         resource = Resource(df)
         report = resource.validate()
         return [error.to_dict() for error in report.flatten(["rowNumber", "fieldName", "message"])]
-    except Exception:
+    except Exception as e:
+        logger.debug("Validation failed: %s", e)
         return []
 
 

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
+
+logger = logging.getLogger(__name__)
 
 from datasculpt.adapters.base import AdapterResult, BaseAdapter, safe_import
 
@@ -66,8 +69,8 @@ def _profile_with_ydata(df: pd.DataFrame) -> AdapterResult:
                 "n_missing_cells": table_stats.get("n_cells_missing", 0),
                 "n_duplicates": table_stats.get("n_duplicates", 0),
             }
-        except AttributeError:
-            pass
+        except AttributeError as e:
+            logger.debug("Could not extract table stats: %s", e)
 
         # Extract per-column statistics
         try:
@@ -78,8 +81,8 @@ def _profile_with_ydata(df: pd.DataFrame) -> AdapterResult:
                     "ydata_n_missing": col_desc.get("n_missing"),
                     "ydata_is_unique": col_desc.get("is_unique", False),
                 }
-        except AttributeError:
-            pass
+        except AttributeError as e:
+            logger.debug("Could not iterate variables: %s", e)
 
     except Exception as e:
         warnings.append(f"ydata-profiling profiling failed: {e}")
@@ -110,7 +113,8 @@ def generate_html_report(df: pd.DataFrame, output_path: str) -> bool:
         profile = ProfileReport(df, minimal=False)
         profile.to_file(output_path)
         return True
-    except Exception:
+    except Exception as e:
+        logger.debug("HTML report generation failed: %s", e)
         return False
 
 
@@ -160,10 +164,11 @@ def get_variable_summary(df: pd.DataFrame, column: str) -> dict[str, Any] | None
         try:
             if column in description.variables:
                 return dict(description.variables[column])
-        except AttributeError:
-            pass
+        except AttributeError as e:
+            logger.debug("Could not access variable description: %s", e)
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug("Variable summary failed: %s", e)
         return None
 
 
@@ -194,7 +199,8 @@ def enrich_evidence_from_profile(
 
         try:
             variables = description.variables
-        except AttributeError:
+        except AttributeError as e:
+            logger.debug("Could not access profile variables: %s", e)
             return column_evidence
 
         for col_name, col_desc in variables.items():
@@ -243,9 +249,8 @@ def enrich_evidence_from_profile(
             # Add a note about enrichment
             evidence.notes.append("Enriched with ydata-profiling statistics")
 
-    except Exception:
-        # Silently fail - enrichment is best-effort
-        pass
+    except Exception as e:
+        logger.debug("Evidence enrichment failed: %s", e)
 
     return column_evidence
 

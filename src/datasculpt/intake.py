@@ -469,7 +469,8 @@ def get_version_history(dataset_name: str, history_dir: Path) -> VersionHistory:
             for e in data.get("entries", [])
         ]
         return VersionHistory(dataset_name=data.get("dataset_name", dataset_name), entries=entries)
-    except (json.JSONDecodeError, KeyError):
+    except (json.JSONDecodeError, KeyError) as e:
+        logger.debug("Could not parse version history: %s", e)
         return VersionHistory(dataset_name=dataset_name, entries=[])
 
 

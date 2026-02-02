@@ -557,7 +557,8 @@ def find_decision_record(directory: Path, fingerprint: str) -> DecisionRecord | 
             if data.get("dataset_fingerprint") == fingerprint:
                 timestamp = datetime.fromisoformat(data["timestamp"])
                 matching_records.append((timestamp, file_path))
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.debug("Could not parse decision record: %s", e)
             continue
 
     if not matching_records:

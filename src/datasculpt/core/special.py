@@ -215,13 +215,11 @@ class ValueDistribution:
 
 def compute_value_distribution(
     sample_values: Sequence[Any],
-    total_rows: int | None = None,  # noqa: ARG001 - reserved for future use
 ) -> ValueDistribution:
     """Compute distribution statistics from sampled values.
 
     Args:
         sample_values: Sample of column values (up to 200 recommended).
-        total_rows: Total row count (for null rate calculation).
 
     Returns:
         ValueDistribution with computed statistics.
