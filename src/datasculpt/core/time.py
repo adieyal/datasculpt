@@ -10,6 +10,8 @@ on median day differences. This handles gaps and irregular reporting dates corre
 
 from __future__ import annotations
 
+import json
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -1280,8 +1282,6 @@ def infer_series_frequency(
 
 def _get_array_lengths(series: pd.Series) -> list[int]:
     """Extract lengths from array values."""
-    import json
-
     lengths: list[int] = []
     for value in series.head(1000):
         if isinstance(value, list):
@@ -1536,8 +1536,6 @@ def rank_time_axis_candidates(
         ))
 
     # Sort by composite score: confidence + name_score - null_rate + log(unique_buckets)
-    import math
-
     def sort_key(c: TimeAxisCandidate) -> float:
         bucket_bonus = math.log(c.unique_bucket_count + 1) / 10  # Normalize
         return (

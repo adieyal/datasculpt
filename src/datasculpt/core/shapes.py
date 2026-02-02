@@ -6,6 +6,7 @@ the best matching shape with confidence assessment.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -757,8 +758,6 @@ def _looks_like_time_header(name: str) -> bool:
     - Quarters: Q1, Q2, 2020Q1
     - Dates: 2020-01-01
     """
-    import re
-
     name = name.strip()
 
     # Year patterns

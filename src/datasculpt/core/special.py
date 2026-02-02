@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
+from datasculpt.core.types import PrimitiveType
+
 if TYPE_CHECKING:
     from datasculpt.core.types import ColumnEvidence
 
@@ -438,8 +440,6 @@ def score_weight_candidate(
         score = min(score, NAME_ONLY_CAP_MODERATE)
 
     # Type-based boost
-    from datasculpt.core.types import PrimitiveType
-
     if evidence.primitive_type in (PrimitiveType.INTEGER, PrimitiveType.NUMBER):
         score += 0.10
         evidence_list.append("type:numeric")
@@ -512,8 +512,6 @@ def score_denominator_candidate(
     score = min(score, cap)
 
     # Type-based boost
-    from datasculpt.core.types import PrimitiveType
-
     if evidence.primitive_type in (PrimitiveType.INTEGER, PrimitiveType.NUMBER):
         score += 0.10
         evidence_list.append("type:numeric")
@@ -586,8 +584,6 @@ def score_suppression_candidate(
         score = min(score, NAME_ONLY_CAP_MODERATE)
 
     # Type-based boost
-    from datasculpt.core.types import PrimitiveType
-
     if evidence.primitive_type in (PrimitiveType.BOOLEAN, PrimitiveType.STRING):
         score += 0.10
         evidence_list.append("type:boolean_or_string")
