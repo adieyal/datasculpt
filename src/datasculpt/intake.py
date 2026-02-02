@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 class IntakeError(Exception):
@@ -296,8 +299,8 @@ def generate_preview(
                 stats.min_value = float(series.min()) if not pd.isna(series.min()) else None
                 stats.max_value = float(series.max()) if not pd.isna(series.max()) else None
                 stats.mean_value = float(series.mean()) if not pd.isna(series.mean()) else None
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as e:
+                logger.debug(f"Failed to compute numeric stats for column '{col}': {e}")
 
         column_stats.append(stats)
 

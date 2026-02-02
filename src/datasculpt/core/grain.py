@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from itertools import combinations
 from typing import TYPE_CHECKING
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 from datasculpt.core.types import (
     ColumnEvidence,
@@ -97,7 +100,8 @@ def _detect_monotonic_sequence(series: pd.Series) -> bool:
         is_zero_based = all(v == i for i, v in enumerate(values))
         is_one_based = all(v == i + 1 for i, v in enumerate(values))
         return is_zero_based or is_one_based
-    except (TypeError, ValueError):
+    except (TypeError, ValueError) as e:
+        logger.debug(f"Monotonic sequence check failed due to type/value error: {e}")
         return False
 
 

@@ -7,12 +7,15 @@ that capture the complete audit trail for inference runs.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 from datasculpt.core.types import (
     ArrayProfile,
@@ -501,8 +504,9 @@ def list_decision_records(directory: Path) -> list[DecisionRecordSummary]:
                 selected_hypothesis=data["selected_hypothesis"],
             )
             summaries.append(summary)
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
             # Skip files that aren't valid decision records
+            logger.warning(f"Skipping invalid decision record file '{file_path}': {e}")
             continue
 
     # Sort by timestamp, newest first
