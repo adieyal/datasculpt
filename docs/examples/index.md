@@ -18,6 +18,7 @@ Each example shows:
 | [Long Indicators](long-indicators.md) | `long_indicators` | indicator/value pairs |
 | [Wide Time Columns](wide-time-columns.md) | `wide_time_columns` | Time periods in headers |
 | [Series Column](series-column.md) | `series_column` | Arrays in cells |
+| [Microdata](microdata.md) | `microdata` | Survey data with coded questions |
 | [Ambiguous Shape](ambiguous-shape.md) | Varies | Close-scoring hypotheses |
 
 ## Other Scenarios

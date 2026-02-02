@@ -54,6 +54,7 @@ nav:
       - Long Indicators: examples/long-indicators.md
       - Wide Time Columns: examples/wide-time-columns.md
       - Series Column: examples/series-column.md
+      - Microdata: examples/microdata.md
       - Ambiguous Shape: examples/ambiguous-shape.md
       - Grain Detection: examples/grain-detection.md
   - Concepts:
