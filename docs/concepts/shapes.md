@@ -29,9 +29,9 @@ Shape 5: Series column
 
 Knowing the shape is essential for correct aggregation, joining, and querying.
 
-### Visual Comparison: Same Data, Five Shapes
+### Visual Comparison: Same Data, Six Shapes
 
-The table below shows identical GDP data (North: 100, 110; South: 80, 85 for years 2022-2023) in all five shapes:
+The table below shows identical GDP data (North: 100, 110; South: 80, 85 for years 2022-2023) in all six shapes:
 
 | Shape | Layout |
 |-------|--------|
@@ -40,6 +40,7 @@ The table below shows identical GDP data (North: 100, 110; South: 80, 85 for yea
 | **wide_observations** | `region, gdp_2022, gdp_2023`<br>`North, 100, 110`<br>`South, 80, 85` |
 | **wide_time_columns** | `region, indicator, 2022, 2023`<br>`North, gdp, 100, 110`<br>`South, gdp, 80, 85` |
 | **series_column** | `region, indicator, series`<br>`North, gdp, [100, 110]`<br>`South, gdp, [80, 85]` |
+| **microdata** | `hhid, indiv, zone, s1aq1, s1aq2`<br>`001, 01, North, 1, 2`<br>`001, 02, North, 2, 1`<br>`002, 01, South, 1, 3` |
 
 ```mermaid
 flowchart TB
@@ -58,7 +59,7 @@ flowchart TB
     logical --> series["<b>series_column</b><br>━━━━━━━━━━━━━━━━━━━━━━━━<br>region │ indicator │ series<br>───────┼───────────┼────────────<br>North  │ gdp       │ [100, 110]<br>South  │ gdp       │ [80, 85]"]
 ```
 
-## The Five Shapes
+## The Six Shapes
 
 ### Long Observations
 
@@ -152,9 +153,29 @@ South,gdp,"[80, 85, 90]",2022
 
 **Use case:** APIs returning time series, compact data exchange
 
+### Microdata
+
+Survey and observation data with coded question columns.
+
+```csv
+hhid,indiv,zone,state,lga,s1aq1,s1aq2,v101,hv001,wt
+001,01,North,Kano,Dala,1,2,3,101,1.25
+001,02,North,Kano,Dala,2,1,2,101,1.25
+002,01,South,Lagos,Ikeja,1,3,1,102,0.95
+```
+
+**Characteristics:**
+- Many columns (30-100+) with coded names following survey patterns (s1aq1, v101, hv001)
+- Hierarchical ID structure (household ID + individual ID)
+- Geography hierarchy columns (zone, state, lga)
+- Many low-cardinality categorical responses
+- Survey weight columns present
+
+**Use case:** Household surveys (DHS, LSMS, MICS), demographic health surveys, census microdata
+
 ## Shape Detection
 
-Datasculpt scores all five shapes based on evidence:
+Datasculpt scores all six shapes based on evidence:
 
 ```python
 result = infer("data.csv")
@@ -174,6 +195,10 @@ for h in result.decision_record.hypotheses:
 | Date-like column headers | `wide_time_columns` |
 | JSON arrays in values | `series_column` |
 | Single numeric column | `long_observations` |
+| Coded question columns (s1aq1, v101) | `microdata` |
+| Hierarchical IDs (hhid + indiv) | `microdata` |
+| Geography hierarchy (zone, state, lga) | `microdata` |
+| Many low-cardinality categoricals | `microdata` |
 
 ### Ambiguity
 
@@ -201,6 +226,7 @@ See [Ambiguous Shape](../examples/ambiguous-shape.md) for handling ambiguity.
 | `wide_observations` | `SUM(measure_col) GROUP BY dimensions` |
 | `wide_time_columns` | Aggregate across time columns, or unpivot first |
 | `series_column` | Expand series, then aggregate |
+| `microdata` | Weighted aggregation using survey weights, GROUP BY geography |
 
 ### For Joins
 
@@ -211,6 +237,7 @@ See [Ambiguous Shape](../examples/ambiguous-shape.md) for handling ambiguity.
 | `wide_observations` | Grain columns |
 | `wide_time_columns` | Grain columns (time is in headers) |
 | `series_column` | Grain columns (series is not a key) |
+| `microdata` | Hierarchical ID columns (hhid, indiv) |
 
 ### For Schema Evolution
 
@@ -221,6 +248,7 @@ See [Ambiguous Shape](../examples/ambiguous-shape.md) for handling ambiguity.
 | `wide_observations` | Unstable (new measures = new columns) |
 | `wide_time_columns` | Unstable (new times = new columns) |
 | `series_column` | Stable (new times = longer arrays) |
+| `microdata` | Semi-stable (new questions = new columns, new respondents = new rows) |
 
 ## Shape to DatasetKind Mapping
 
@@ -233,6 +261,7 @@ Datasculpt maps shapes to Invariant's DatasetKind:
 | `wide_observations` | `OBSERVATIONS` |
 | `wide_time_columns` | `TIMESERIES_WIDE` |
 | `series_column` | `TIMESERIES_SERIES` |
+| `microdata` | `MICRODATA` |
 
 ## Configuration
 

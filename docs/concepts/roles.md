@@ -19,7 +19,7 @@ ZA-GP,F,15-24,1200000,180000
 | population | integer | **measure** — aggregatable value |
 | unemployed | integer | **measure** — aggregatable value |
 
-## The Eight Roles
+## Core Roles
 
 ### Key
 
@@ -123,6 +123,90 @@ Descriptive, non-analytical. Notes, comments, labels.
 
 ```python
 role_scores[Role.METADATA] = 0.60
+```
+
+## Survey-Specific Roles
+
+These roles are primarily scored when microdata shape is detected. They capture the structural patterns common in household surveys, health surveys (DHS), and living standards measurement studies (LSMS).
+
+### Respondent ID
+
+Primary unit identifier. The main entity being surveyed (household, person).
+
+**Signals:**
+- High cardinality (one per unit)
+- Name patterns: `hhid`, `hh_id`, `person_id`, `caseid`, `respondent_id`, `pid`
+- Low null rate
+- Integer or string type
+
+```python
+role_scores[Role.RESPONDENT_ID] = 0.80  # Matches hhid pattern, high cardinality
+```
+
+### Subunit ID
+
+Secondary identifier within a primary unit. Identifies individuals within households, children within mothers.
+
+**Signals:**
+- Low-moderate cardinality (typically 1-N where N is small)
+- Name patterns: `indiv`, `member_num`, `child_num`, `line_num`, `roster_num`
+- Integer type common (roster line numbers)
+
+```python
+role_scores[Role.SUBUNIT_ID] = 0.70  # Matches member_num, low cardinality
+```
+
+### Cluster ID
+
+Sampling cluster or enumeration area identifier. Used for complex survey designs.
+
+**Signals:**
+- Moderate cardinality (fewer clusters than respondents)
+- Name patterns: `ea`, `cluster`, `psu`, `stratum`, `segment`
+- Integer or string type
+
+```python
+role_scores[Role.CLUSTER_ID] = 0.75  # Matches ea pattern
+```
+
+### Survey Weight
+
+Sampling weights for weighted estimates. Required for proper inference from complex surveys.
+
+**Signals:**
+- Numeric type (required)
+- Positive values (weights are always positive)
+- Name patterns: `weight`, `wgt`, `wght`, `hh_weight`, `pweight`, `expansion_factor`
+- Moderate distinct ratio (weights often repeated within strata)
+
+```python
+role_scores[Role.SURVEY_WEIGHT] = 0.85  # Matches weight pattern, positive numeric
+```
+
+### Question Response
+
+Coded survey question answers. The actual response data collected from respondents.
+
+**Signals:**
+- Low cardinality (categorical responses, typically 2-20 options)
+- Name patterns: `s1aq1`, `v101`, `hv001`, `q1`, `var_01` (survey coding conventions)
+- Most relevant in microdata shape
+
+```python
+role_scores[Role.QUESTION_RESPONSE] = 0.75  # Matches v101 pattern, low cardinality
+```
+
+### Geography Level
+
+Administrative hierarchy levels. Geographic classification at various administrative divisions.
+
+**Signals:**
+- Low-moderate cardinality (enumerable administrative units)
+- Name patterns: `zone`, `region`, `state`, `province`, `lga`, `district`, `ward`, `admin1`, `admin2`
+- String type (geographic names) or integer (codes)
+
+```python
+role_scores[Role.GEOGRAPHY_LEVEL] = 0.80  # Matches district pattern, low cardinality
 ```
 
 ## Role Scoring

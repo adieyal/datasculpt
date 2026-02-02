@@ -62,7 +62,7 @@ for col in result.proposal.columns:
 
 ## Key Features
 
-### Five Dataset Shapes
+### Six Dataset Shapes
 
 | Shape | Description |
 |-------|-------------|
@@ -71,8 +71,9 @@ for col in result.proposal.columns:
 | `wide_observations` | Measures as columns |
 | `wide_time_columns` | Time periods in column headers |
 | `series_column` | Time series as arrays in cells |
+| `microdata` | Survey/observation data with coded questions |
 
-### Eight Column Roles
+### Fourteen Column Roles
 
 | Role | Purpose |
 |------|---------|
@@ -84,6 +85,8 @@ for col in result.proposal.columns:
 | `value` | Values in unpivoted data |
 | `series` | Embedded time series |
 | `metadata` | Descriptive, non-analytical |
+
+*Plus 6 survey-specific roles for microdata: `respondent_id`, `question_code`, `response_code`, `weight`, `filter_variable`, `interviewer_id`.*
 
 ### Deterministic Inference
 
